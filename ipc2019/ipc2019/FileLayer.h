@@ -18,27 +18,30 @@ public:
 private:
     enum
     {
-        FILE_TYPE_START = 0x01,
-        FILE_TYPE_DATA = 0x02,
-        FILE_TYPE_END = 0x03,
-        FILE_PACKET_HEADER_SIZE = 9,
+        FILE_MSG_START = 0x00,
+        FILE_MSG_DATA = 0x01,
+        FILE_MSG_END = 0x02,
+        FILE_DATA_KIND = 0x0001,
+        FILE_PACKET_HEADER_SIZE = 12,
         FILE_DATA_SIZE = ETHER_MAX_DATA_SIZE - FILE_PACKET_HEADER_SIZE
     };
 
 #pragma pack(push, 1)
     typedef struct _FILE_PACKET
     {
-        unsigned char type;
-        unsigned int sequence;
-        unsigned int dataLength;
-        unsigned char data[FILE_DATA_SIZE];
+        unsigned int fapp_totlen;
+        unsigned short fapp_type;
+        unsigned char fapp_msg_type;
+        unsigned char fapp_unused;
+        unsigned int fapp_seq_num;
+        unsigned char fapp_data[FILE_DATA_SIZE];
     } FILE_PACKET, *PFILE_PACKET;
 #pragma pack(pop)
 
     static UINT FileTransferThread(LPVOID pParam);
     UINT SendFile();
     BOOL SendPacket(
-        unsigned char type,
+        unsigned char messageType,
         unsigned int sequence,
         const unsigned char* data,
         unsigned int dataLength);
@@ -46,6 +49,10 @@ private:
     BOOL ReceiveData(PFILE_PACKET packet);
     BOOL ReceiveEnd(PFILE_PACKET packet);
     void NotifyDialog(const CString& message);
+
+    static unsigned short Swap16(unsigned short value);
+    static unsigned int Swap32(unsigned int value);
+    static ULONGLONG Swap64(ULONGLONG value);
 
 private:
     CString m_SendFilePath;
