@@ -60,20 +60,42 @@ unsigned int CChatAppLayer::GetDestinAddress()
 
 BOOL CChatAppLayer::Send(unsigned char* ppayload, int nlength)
 {
-	m_sHeader.app_length = (unsigned short)nlength;
+	if (ppayload == nullptr || nlength <= 0 || mp_UnderLayer == nullptr)
+		return FALSE;
 
-	BOOL bSuccess = FALSE;
-	//////////////////////// fill the blank ///////////////////////////////
-		// 메모리 복사로 데이터를 header에 저장
-		// ChatApp 레이어의 헤더에 데이터와 그 길이를 저장한다.
-	memcpy(m_sHeader.app_data, ppayload, nlength > APP_DATA_SIZE ? APP_DATA_SIZE : nlength);
+	int offset = 0;
 
-	// ChatApp 레이어의 밑에 레이어인 Ethertnet 레이어에 데이터를 넘겨준다.
-	// 메로리 참조로 ChatApp의(헤더 + 데이터)와 (데이터 길이+헤더길이)를
-	// 다음 계층의 data로 넘겨준다.
-	bSuccess = mp_UnderLayer->Send((unsigned char*)&m_sHeader, nlength + APP_HEADER_SIZE);
-	///////////////////////////////////////////////////////////////////////
-	return bSuccess;
+	while (offset < nlength)
+	{
+		int fragmentLength =
+			(nlength - offset > APP_DATA_SIZE)
+			? APP_DATA_SIZE
+			: nlength - offset;
+
+		memset(m_sHeader.app_data, 0, APP_DATA_SIZE);
+		memcpy(
+			m_sHeader.app_data,
+			ppayload + offset,
+			fragmentLength);
+
+		m_sHeader.app_length =
+			static_cast<unsigned short>(fragmentLength);
+		m_sHeader.app_type =
+			(offset + fragmentLength < nlength)
+			? DATA_TYPE_CONT
+			: DATA_TYPE_END;
+
+		if (!mp_UnderLayer->Send(
+				(unsigned char*)&m_sHeader,
+				fragmentLength + APP_HEADER_SIZE))
+		{
+			return FALSE;
+		}
+
+		offset += fragmentLength;
+	}
+
+	return TRUE;
 }
 
 BOOL CChatAppLayer::Receive(unsigned char* ppayload)
@@ -81,15 +103,32 @@ BOOL CChatAppLayer::Receive(unsigned char* ppayload)
 	// ppayload를 ChatApp 헤더 구조체로 넣는다.
 	PCHAT_APP_HEADER app_hdr = (PCHAT_APP_HEADER)ppayload;
 
-	unsigned char receivedData[APP_DATA_SIZE + 1] = {};
-	int receivedLength =
-		app_hdr->app_length > APP_DATA_SIZE ? APP_DATA_SIZE : app_hdr->app_length;
+	if (app_hdr->app_length > APP_DATA_SIZE)
+	{
+		m_ReceiveBuffer.clear();
+		return FALSE;
+	}
 
-	memcpy(receivedData, app_hdr->app_data, receivedLength);
+	m_ReceiveBuffer.insert(
+		m_ReceiveBuffer.end(),
+		app_hdr->app_data,
+		app_hdr->app_data + app_hdr->app_length);
+
+	if (app_hdr->app_type == DATA_TYPE_CONT)
+		return TRUE;
+
+	if (app_hdr->app_type != DATA_TYPE_END)
+	{
+		m_ReceiveBuffer.clear();
+		return FALSE;
+	}
+
+	m_ReceiveBuffer.push_back('\0');
 	CString receivedMessage = CA2W(
-		reinterpret_cast<const char*>(receivedData),
+		reinterpret_cast<const char*>(m_ReceiveBuffer.data()),
 		CP_UTF8);
 	CString displayMessage = _T("[RECV] ") + receivedMessage;
+	m_ReceiveBuffer.clear();
 
 	return mp_aUpperLayer[0]->Receive(
 		reinterpret_cast<unsigned char*>(
