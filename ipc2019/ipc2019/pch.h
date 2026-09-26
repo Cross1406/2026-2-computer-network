@@ -14,5 +14,6 @@
 #include "ChatAppLayer.h"
 #include "EthernetLayer.h"
 #include "FileLayer.h"
+#include "NILayer.h"
 
 #endif //PCH_H
