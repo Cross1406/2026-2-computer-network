@@ -45,6 +45,7 @@ public:
 //	UINT m_unDstAddr;
 //	UINT unSrcAddr;
 //	CString m_stMessage;
+	CString m_stFilePath;
 //	CListBox m_ListChat;
 	
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
@@ -82,6 +83,7 @@ private:
 	CChatAppLayer* m_ChatApp;
 	CEthernetLayer* m_Ethernet;
 	CNILayer* m_NILayer;
+	CFileLayer* m_FileLayer;
 
 	// Implementation
 	UINT			m_wParam;
@@ -95,5 +97,7 @@ public:
 	CListBox m_ListChat;
 	afx_msg void OnBnClickedCheckToall();
 	afx_msg void OnBnClickedButtonAdapterConnect();
+	afx_msg void OnBnClickedButtonFileBrowse();
+	afx_msg void OnBnClickedButtonFileSend();
 	CComboBox m_AdapterCombo;
 };
