@@ -12,6 +12,11 @@
 #include "BaseLayer.h"
 #include "pch.h"
 
+#define ETHER_TYPE_CHAT 0x2080
+#define ETHER_TYPE_FILE 0x2090
+#define ETHER_TYPE_CHAT_NETWORK 0x8020
+#define ETHER_TYPE_FILE_NETWORK 0x9020
+
 class CEthernetLayer
 	: public CBaseLayer
 {
