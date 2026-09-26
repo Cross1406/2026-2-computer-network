@@ -5,6 +5,7 @@
 #include "stdafx.h"
 #include "pch.h"
 #include "ChatAppLayer.h"
+#include <atlconv.h>
 
 #ifdef _DEBUG
 #undef THIS_FILE
@@ -63,13 +64,13 @@ BOOL CChatAppLayer::Send(unsigned char* ppayload, int nlength)
 
 	BOOL bSuccess = FALSE;
 	//////////////////////// fill the blank ///////////////////////////////
-		// ¸Þ¸ð¸® º¹»ç·Î µ¥ÀÌÅÍ¸¦ header¿¡ ÀúÀå
-		// ChatApp ·¹ÀÌ¾îÀÇ Çì´õ¿¡ µ¥ÀÌÅÍ¿Í ±× ±æÀÌ¸¦ ÀúÀåÇÑ´Ù.
+		// ë©”ëª¨ë¦¬ ë³µì‚¬ë¡œ ë°ì´í„°ë¥¼ headerì— ì €ìž¥
+		// ChatApp ë ˆì´ì–´ì˜ í—¤ë”ì— ë°ì´í„°ì™€ ê·¸ ê¸¸ì´ë¥¼ ì €ìž¥í•œë‹¤.
 	memcpy(m_sHeader.app_data, ppayload, nlength > APP_DATA_SIZE ? APP_DATA_SIZE : nlength);
 
-	// ChatApp ·¹ÀÌ¾îÀÇ ¹Ø¿¡ ·¹ÀÌ¾îÀÎ Ethertnet ·¹ÀÌ¾î¿¡ µ¥ÀÌÅÍ¸¦ ³Ñ°ÜÁØ´Ù.
-	// ¸Þ·Î¸® ÂüÁ¶·Î ChatAppÀÇ(Çì´õ + µ¥ÀÌÅÍ)¿Í (µ¥ÀÌÅÍ ±æÀÌ+Çì´õ±æÀÌ)¸¦
-	// ´ÙÀ½ °èÃþÀÇ data·Î ³Ñ°ÜÁØ´Ù.
+	// ChatApp ë ˆì´ì–´ì˜ ë°‘ì— ë ˆì´ì–´ì¸ Ethertnet ë ˆì´ì–´ì— ë°ì´í„°ë¥¼ ë„˜ê²¨ì¤€ë‹¤.
+	// ë©”ë¡œë¦¬ ì°¸ì¡°ë¡œ ChatAppì˜(í—¤ë” + ë°ì´í„°)ì™€ (ë°ì´í„° ê¸¸ì´+í—¤ë”ê¸¸ì´)ë¥¼
+	// ë‹¤ìŒ ê³„ì¸µì˜ dataë¡œ ë„˜ê²¨ì¤€ë‹¤.
 	bSuccess = mp_UnderLayer->Send((unsigned char*)&m_sHeader, nlength + APP_HEADER_SIZE);
 	///////////////////////////////////////////////////////////////////////
 	return bSuccess;
@@ -77,38 +78,22 @@ BOOL CChatAppLayer::Send(unsigned char* ppayload, int nlength)
 
 BOOL CChatAppLayer::Receive(unsigned char* ppayload)
 {
-	// ppayload¸¦ ChatApp Çì´õ ±¸Á¶Ã¼·Î ³Ö´Â´Ù.
+	// ppayloadë¥¼ ChatApp í—¤ë” êµ¬ì¡°ì²´ë¡œ ë„£ëŠ”ë‹¤.
 	PCHAT_APP_HEADER app_hdr = (PCHAT_APP_HEADER)ppayload;
 
-	// º¸³»´Â ÂÊ ÁÖ¼Ò¿Í ¹Þ´Â ÂÊÀÇ ÁÖ¼Ò°¡ ÀÏÄ¡ÇÑ °æ¿ì ¸Þ½ÃÁö¸¦ º¸³½´Ù.
-	if (app_hdr->app_dstaddr == m_sHeader.app_srcaddr ||
-		(app_hdr->app_srcaddr != m_sHeader.app_srcaddr &&
-			app_hdr->app_dstaddr == (unsigned int)0xff))
-	{
-		//////////////////////// fill the blank ///////////////////////////////
-				// ¹Ø °èÃþ¿¡¼­ ³Ñ°Ü¹ÞÀº ppayload¸¦ ºÐ¼®ÇÏ¿© ChatDlg °èÃþÀ¸·Î ³Ñ°ÜÁØ´Ù.
-		unsigned char GetBuff[APP_DATA_SIZE]; // 32ºñÆ® Å©±âÀÇ App Data Size¸¸Å­ÀÇ GetBuff¸¦ ¼±¾ðÇÑ´Ù.
-		memset(GetBuff, '\0', APP_DATA_SIZE);  // GetBuff¸¦ ÃÊ±âÈ­ÇØÁØ´Ù.
+	unsigned char receivedData[APP_DATA_SIZE + 1] = {};
+	int receivedLength =
+		app_hdr->app_length > APP_DATA_SIZE ? APP_DATA_SIZE : app_hdr->app_length;
 
-		// ¹ÞÀº µ¥ÀÌÅÍÀÎ App Header¸¦ ºÐ¼®ÇÏ¿©, GetBuff¿¡ data ±æÀÌ¿Í APP_DATA_SIZE ±æÀÌ¿Í ºñ±³ÇÏ¿© Á¤ÇÑ ±æÀÌ¸¸Å­
-		// data¸¦ ÀúÀåÇÑ´Ù.
-		memcpy(GetBuff, app_hdr->app_data, app_hdr->app_length > APP_DATA_SIZE ? APP_DATA_SIZE : app_hdr->app_length);
+	memcpy(receivedData, app_hdr->app_data, receivedLength);
+	CString receivedMessage = CA2W(
+		reinterpret_cast<const char*>(receivedData),
+		CP_UTF8);
+	CString displayMessage = _T("[RECV] ") + receivedMessage;
 
-		CString Msg;
-		// App Header¸¦ ºÐ¼®ÇÏ¿©, ¸®½ºÆ® Ã¢¿¡ »Ñ·ÁÁÙ ³»¿ëÀÇ ¸Þ½ÃÁö¸¦ ±¸¼ºÇÑ´Ù.
-		// º¸³»´Â ÂÊ ¶Ç´Â ¹Þ´Â ÂÊ°ú GetBuff¿¡ ÀúÀåµÈ ¸Þ½ÃÁö ³»¿ëÀ» ÇÕÄ£´Ù.
-		if (app_hdr->app_dstaddr == (unsigned int)0xff)
-			Msg.Format(_T("[%d:BROADCAST] %s"), app_hdr->app_srcaddr, (char*)GetBuff);
-		else
-			Msg.Format(_T("[%d:%d] %s"), app_hdr->app_srcaddr, app_hdr->app_dstaddr, (char*)GetBuff);
-
-		// À§¿¡¼­ ¸¸µé¾îÁø ¸Þ½ÃÁö Æ÷¸ËÀ» ChatDlg·Î ³Ñ°ÜÁØ´Ù.
-		mp_aUpperLayer[0]->Receive((unsigned char*)Msg.GetBuffer(0));
-		///////////////////////////////////////////////////////////////////////
-		return TRUE;
-	}
-	else
-		return FALSE;
+	return mp_aUpperLayer[0]->Receive(
+		reinterpret_cast<unsigned char*>(
+			const_cast<LPTSTR>(displayMessage.GetString())));
 }
 
 
