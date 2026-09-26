@@ -1,64 +1,43 @@
 #pragma once
-// ChatAppLayer.h: interface for the CChatAppLayer class.
-//
-//////////////////////////////////////////////////////////////////////
-
-#if !defined(AFX_CHATAPPLAYER_H__E78615DE_0F23_41A9_B814_34E2B3697EF2__INCLUDED_)
-#define AFX_CHATAPPLAYER_H__E78615DE_0F23_41A9_B814_34E2B3697EF2__INCLUDED_
-
-#if _MSC_VER > 1000
-#pragma once
-#endif // _MSC_VER > 1000
 
 #include "BaseLayer.h"
 #include "pch.h"
 #include <vector>
-class CChatAppLayer
-	: public CBaseLayer
+
+class CChatAppLayer : public CBaseLayer
 {
 private:
-	inline void		ResetHeader();
-	CObject* mp_Dlg;
-	std::vector<unsigned char> m_ReceiveBuffer;
+    inline void ResetHeader();
 
 public:
-	BOOL			Receive(unsigned char* ppayload);
-	BOOL			Send(unsigned char* ppayload, int nlength);
-	unsigned int	GetDestinAddress();
-	unsigned int	GetSourceAddress();
-	void			SetDestinAddress(unsigned int dst_addr);
-	void			SetSourceAddress(unsigned int src_addr);
+    BOOL Receive(unsigned char* ppayload) override;
+    BOOL Send(unsigned char* ppayload, int nlength) override;
 
-	CChatAppLayer(char* pName);
-	virtual ~CChatAppLayer();
+    CChatAppLayer(char* pName);
+    virtual ~CChatAppLayer();
 
-	typedef struct _CHAT_APP_HEADER {
+#pragma pack(push, 1)
+    typedef struct _CHAT_APP_HEADER
+    {
+        unsigned short capp_totlen;
+        unsigned char capp_type;
+        unsigned char capp_unused;
+        unsigned char capp_data[APP_DATA_SIZE];
+    } CHAT_APP_HEADER, *PCHAT_APP_HEADER;
+#pragma pack(pop)
 
-		unsigned int	app_dstaddr; // destination address of application layer
-		unsigned int	app_srcaddr; // source address of application layer
-		unsigned short	app_length; // total length of the data
-		unsigned char	app_type; // type of application data
-		unsigned char	app_data[APP_DATA_SIZE]; // application data
+private:
+    enum
+    {
+        CHAT_TYPE_FIRST = 0x00,
+        CHAT_TYPE_MIDDLE = 0x01,
+        CHAT_TYPE_LAST = 0x02
+    };
 
-	} CHAT_APP_HEADER, * PCHAT_APP_HEADER;
+    static unsigned short Swap16(unsigned short value);
 
-protected:
-	CHAT_APP_HEADER		m_sHeader;
-
-	enum {
-		DATA_TYPE_CONT = 0x01,
-		DATA_TYPE_END = 0x02
-	};
+private:
+    CHAT_APP_HEADER m_sHeader;
+    std::vector<unsigned char> m_ReceiveBuffer;
+    unsigned int m_ExpectedLength;
 };
-
-#endif // !defined(AFX_CHATAPPLAYER_H__E78615DE_0F23_41A9_B814_34E2B3697EF2__INCLUDED_)
-
-
-
-
-
-
-
-
-
-
