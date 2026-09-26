@@ -62,6 +62,7 @@ Cipc2019Dlg::Cipc2019Dlg(CWnd* pParent /*=nullptr*/)
 	, m_stSrcAddr(_T("00:00:00:00:00:00"))
 	, m_stDstAddr(_T("00:00:00:00:00:00"))
 	, m_stMessage(_T(""))
+	, m_stFilePath(_T(""))
 {
 	//대화상자 멤버 변수 초기화
 	//  m_unDstAddr = 0;
@@ -79,11 +80,12 @@ Cipc2019Dlg::Cipc2019Dlg(CWnd* pParent /*=nullptr*/)
 	m_LayerMgr.AddLayer(this);
 
 	// 레이어를 연결한다. (레이어 생성)
-	m_LayerMgr.ConnectLayers("NI ( *Ethernet ( *ChatApp ( *ChatDlg ) ) ) )");
+	m_LayerMgr.ConnectLayers("NI ( *Ethernet ( *ChatApp ( *ChatDlg ) *File ( *ChatDlg ) ) ) )");
 
 	m_ChatApp = (CChatAppLayer*)m_LayerMgr.GetLayer("ChatApp");
 	m_Ethernet = (CEthernetLayer*)m_LayerMgr.GetLayer("Ethernet");
 	m_NILayer = (CNILayer*)m_LayerMgr.GetLayer("NI");
+	m_FileLayer = (CFileLayer*)m_LayerMgr.GetLayer("File");
 	//Protocol Layer Setting
 }
 
@@ -93,6 +95,7 @@ void Cipc2019Dlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Text(pDX, IDC_EDIT_SRC, m_stSrcAddr);
 	DDX_Text(pDX, IDC_EDIT_DST, m_stDstAddr);
 	DDX_Text(pDX, IDC_EDIT_MSG, m_stMessage);
+	DDX_Text(pDX, IDC_EDIT_FILE_PATH, m_stFilePath);
 	DDX_Control(pDX, IDC_LIST_CHAT, m_ListChat);
 	DDX_Control(pDX, IDC_COMBO_ADAPTER, m_AdapterCombo);
 }
@@ -120,6 +123,8 @@ BEGIN_MESSAGE_MAP(Cipc2019Dlg, CDialogEx)
 	
 	ON_BN_CLICKED(IDC_CHECK_TOALL, &Cipc2019Dlg::OnBnClickedCheckToall)
 	ON_BN_CLICKED(IDC_BUTTON_ADAPTER_CONNECT, &Cipc2019Dlg::OnBnClickedButtonAdapterConnect)
+	ON_BN_CLICKED(IDC_BUTTON_FILE_BROWSE, &Cipc2019Dlg::OnBnClickedButtonFileBrowse)
+	ON_BN_CLICKED(IDC_BUTTON_FILE_SEND, &Cipc2019Dlg::OnBnClickedButtonFileSend)
 END_MESSAGE_MAP()
 
 
@@ -307,6 +312,7 @@ void Cipc2019Dlg::SetDlgState(int state)
 
 	CButton* pSendButton = (CButton*)GetDlgItem(bt_send);
 	CButton* pSetAddrButton = (CButton*)GetDlgItem(bt_setting);
+	CButton* pFileSendButton = (CButton*)GetDlgItem(IDC_BUTTON_FILE_SEND);
 	CEdit* pMsgEdit = (CEdit*)GetDlgItem(IDC_EDIT3);
 	CEdit* pSrcEdit = (CEdit*)GetDlgItem(IDC_EDIT1);
 	CEdit* pDstEdit = (CEdit*)GetDlgItem(IDC_EDIT2);
@@ -315,11 +321,13 @@ void Cipc2019Dlg::SetDlgState(int state)
 	{
 	case IPC_INITIALIZING:
 		pSendButton->EnableWindow(FALSE);
+		pFileSendButton->EnableWindow(FALSE);
 		pMsgEdit->EnableWindow(FALSE);
 		m_ListChat.EnableWindow(FALSE);
 		break;
 	case IPC_READYTOSEND:
 		pSendButton->EnableWindow(TRUE);
+		pFileSendButton->EnableWindow(TRUE);
 		pMsgEdit->EnableWindow(TRUE);
 		m_ListChat.EnableWindow(TRUE);
 		break;
@@ -492,4 +500,51 @@ void Cipc2019Dlg::OnBnClickedButtonAdapterConnect()
 
 	SetDlgItemText(IDC_BUTTON_ADAPTER_CONNECT, _T("연결됨"));
 	m_ListChat.AddString(_T(">> Network adapter connected."));
+}
+
+
+void Cipc2019Dlg::OnBnClickedButtonFileBrowse()
+{
+	CFileDialog fileDialog(
+		TRUE,
+		nullptr,
+		nullptr,
+		OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST,
+		_T("All Files (*.*)|*.*||"),
+		this);
+
+	if (fileDialog.DoModal() == IDOK)
+	{
+		m_stFilePath = fileDialog.GetPathName();
+		UpdateData(FALSE);
+	}
+}
+
+void Cipc2019Dlg::OnBnClickedButtonFileSend()
+{
+	UpdateData(TRUE);
+
+	if (!m_bSendReady)
+	{
+		AfxMessageBox(_T("MAC 주소를 먼저 설정하세요."));
+		return;
+	}
+
+	if (m_stFilePath.IsEmpty() ||
+		GetFileAttributes(m_stFilePath) == INVALID_FILE_ATTRIBUTES)
+	{
+		AfxMessageBox(_T("전송할 파일을 선택하세요."));
+		return;
+	}
+
+	if (m_FileLayer == nullptr ||
+		!m_FileLayer->StartFileSend(m_stFilePath))
+	{
+		AfxMessageBox(
+			_T("이미 파일 전송 중이거나 전송을 시작할 수 없습니다."),
+			MB_OK | MB_ICONERROR);
+		return;
+	}
+
+	m_ListChat.AddString(_T(">> Sending file: ") + m_stFilePath);
 }
