@@ -32,12 +32,8 @@
 #define TCP_HEADER_SIZE			20
 #define IP_HEADER_SIZE			20
 
-#define APP_HEADER_SIZE			( sizeof(unsigned int) * 2 +				\
-								  sizeof(unsigned short) +					\
-								  sizeof(unsigned char)	)
-#define APP_DATA_SIZE			( ETHER_MAX_DATA_SIZE - ( APP_HEADER_SIZE +		\
-												          TCP_HEADER_SIZE +		\
-												          IP_HEADER_SIZE ) )
+#define APP_HEADER_SIZE            4
+#define APP_DATA_SIZE              (ETHER_MAX_DATA_SIZE - APP_HEADER_SIZE)
 
 // Microsoft Visual C++ will insert additional declarations immediately before the previous line.
 
