@@ -8,6 +8,7 @@
 #include "ChatAppLayer.h"	// Added by ClassView
 #include "EthernetLayer.h"	// Added by ClassView
 #include "FileLayer.h"	// Added by ClassView
+#include "NILayer.h"	// Npcap network interface layer
 // Cipc2019Dlg 대화 상자
 class Cipc2019Dlg : public CDialogEx, public CBaseLayer
 {
