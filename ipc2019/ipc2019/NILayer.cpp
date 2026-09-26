@@ -106,6 +106,33 @@ BOOL CNILayer::SetAdapter(int nIndex)
     if (m_pAdapter == nullptr)
         return FALSE;
 
+    // Only deliver frames used by this assignment.
+    bpf_program filterProgram;
+    const char* filterExpression = "ether proto 0x2080 or ether proto 0x2090";
+
+    if (pcap_compile(
+            m_pAdapter,
+            &filterProgram,
+            filterExpression,
+            1,
+            PCAP_NETMASK_UNKNOWN) < 0)
+    {
+        strncpy_s(m_ErrorBuffer, pcap_geterr(m_pAdapter), _TRUNCATE);
+        pcap_close(m_pAdapter);
+        m_pAdapter = nullptr;
+        return FALSE;
+    }
+
+    if (pcap_setfilter(m_pAdapter, &filterProgram) < 0)
+    {
+        strncpy_s(m_ErrorBuffer, pcap_geterr(m_pAdapter), _TRUNCATE);
+        pcap_freecode(&filterProgram);
+        pcap_close(m_pAdapter);
+        m_pAdapter = nullptr;
+        return FALSE;
+    }
+
+    pcap_freecode(&filterProgram);
     return StartReceive();
 }
 
