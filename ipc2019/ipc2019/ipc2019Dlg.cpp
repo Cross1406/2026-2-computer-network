@@ -125,6 +125,7 @@ BEGIN_MESSAGE_MAP(Cipc2019Dlg, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON_ADAPTER_CONNECT, &Cipc2019Dlg::OnBnClickedButtonAdapterConnect)
 	ON_BN_CLICKED(IDC_BUTTON_FILE_BROWSE, &Cipc2019Dlg::OnBnClickedButtonFileBrowse)
 	ON_BN_CLICKED(IDC_BUTTON_FILE_SEND, &Cipc2019Dlg::OnBnClickedButtonFileSend)
+	ON_MESSAGE(WM_APP_LAYER_MESSAGE, &Cipc2019Dlg::OnLayerMessage)
 END_MESSAGE_MAP()
 
 
@@ -268,19 +269,47 @@ void Cipc2019Dlg::SendData()
 
 BOOL Cipc2019Dlg::Receive(unsigned char* ppayload)
 {
-	if (m_nAckReady == -1)
+	if (ppayload == nullptr || GetSafeHwnd() == nullptr)
+		return FALSE;
+
+	CString* message = new CString(
+		reinterpret_cast<LPCTSTR>(ppayload));
+
+	if (!PostMessage(
+			WM_APP_LAYER_MESSAGE,
+			0,
+			reinterpret_cast<LPARAM>(message)))
 	{
-		//////////////////////// fill the blank ///////////////////////////////
-				// 현재 과제에서는 쓰이지 않음.
-				// 여기서 FALSE처리를 해도 다음 함수들에서 TRUE처리가 되므로
-				// return은 의미 없다.
-				// 다음 과제에서 Receive시 Ack 메시지를 받은 경우
-				// 어떠한 처리 과정에 쓰일 것으로 추정.
-		///////////////////////////////////////////////////////////////////////
+		delete message;
+		return FALSE;
 	}
 
-	m_ListChat.AddString((LPCTSTR)ppayload);
 	return TRUE;
+}
+
+LRESULT Cipc2019Dlg::OnLayerMessage(WPARAM wParam, LPARAM lParam)
+{
+	UNREFERENCED_PARAMETER(wParam);
+
+	CString* message = reinterpret_cast<CString*>(lParam);
+	if (message == nullptr)
+		return 0;
+
+	m_ListChat.AddString(*message);
+
+	if (message->Find(_T("File transfer completed")) >= 0)
+		SetDlgItemText(IDC_STATIC_FILE_STATUS, _T("상태: 전송 완료"));
+	else if (message->Find(_T("File transfer failed")) >= 0)
+		SetDlgItemText(IDC_STATIC_FILE_STATUS, _T("상태: 전송 실패"));
+	else if (message->Find(_T("Receiving file")) >= 0)
+		SetDlgItemText(IDC_STATIC_FILE_STATUS, _T("상태: 수신 중"));
+	else if (message->Find(_T("File received")) >= 0)
+		SetDlgItemText(IDC_STATIC_FILE_STATUS, _T("상태: 수신 완료"));
+	else if (message->Find(_T("File size mismatch")) >= 0)
+		SetDlgItemText(IDC_STATIC_FILE_STATUS, _T("상태: 수신 오류"));
+
+	delete message;
+	return 0;
 }
 
 BOOL Cipc2019Dlg::PreTranslateMessage(MSG* pMsg)
@@ -516,6 +545,7 @@ void Cipc2019Dlg::OnBnClickedButtonFileBrowse()
 	if (fileDialog.DoModal() == IDOK)
 	{
 		m_stFilePath = fileDialog.GetPathName();
+		SetDlgItemText(IDC_STATIC_FILE_STATUS, _T("상태: 파일 선택됨"));
 		UpdateData(FALSE);
 	}
 }
@@ -547,4 +577,5 @@ void Cipc2019Dlg::OnBnClickedButtonFileSend()
 	}
 
 	m_ListChat.AddString(_T(">> Sending file: ") + m_stFilePath);
+	SetDlgItemText(IDC_STATIC_FILE_STATUS, _T("상태: 전송 중"));
 }
