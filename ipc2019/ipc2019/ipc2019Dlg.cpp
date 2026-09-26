@@ -81,6 +81,7 @@ Cipc2019Dlg::Cipc2019Dlg(CWnd* pParent /*=nullptr*/)
 	m_LayerMgr.ConnectLayers("NI ( *Ethernet ( *ChatApp ( *ChatDlg ) ) ) )");
 
 	m_ChatApp = (CChatAppLayer*)m_LayerMgr.GetLayer("ChatApp");
+	m_NILayer = (CNILayer*)m_LayerMgr.GetLayer("NI");
 	//Protocol Layer Setting
 }
 
@@ -91,6 +92,7 @@ void Cipc2019Dlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Text(pDX, IDC_EDIT_DST, m_unDstAddr);
 	DDX_Text(pDX, IDC_EDIT_MSG, m_stMessage);
 	DDX_Control(pDX, IDC_LIST_CHAT, m_ListChat);
+	DDX_Control(pDX, IDC_COMBO_ADAPTER, m_AdapterCombo);
 }
 
 // 레지스트리에 등록하기 위한 변수
@@ -115,6 +117,7 @@ BEGIN_MESSAGE_MAP(Cipc2019Dlg, CDialogEx)
 	
 	
 	ON_BN_CLICKED(IDC_CHECK_TOALL, &Cipc2019Dlg::OnBnClickedCheckToall)
+	ON_BN_CLICKED(IDC_BUTTON_ADAPTER_CONNECT, &Cipc2019Dlg::OnBnClickedButtonAdapterConnect)
 END_MESSAGE_MAP()
 
 
@@ -149,7 +152,21 @@ BOOL Cipc2019Dlg::OnInitDialog()
 	SetIcon(m_hIcon, TRUE);			// 큰 아이콘을 설정합니다.
 	SetIcon(m_hIcon, FALSE);		// 작은 아이콘을 설정합니다.
 
-	// TODO: 여기에 추가 초기화 작업을 추가합니다.
+	// Npcap에서 찾은 네트워크 어댑터를 선택 목록에 표시한다.
+	if (m_NILayer != nullptr)
+	{
+		for (int i = 0; i < m_NILayer->GetAdapterCount(); ++i)
+		{
+			const char* description = m_NILayer->GetAdapterDescription(i);
+			CString adapterText;
+			adapterText.Format(_T("%S"), description != nullptr ? description : "Unknown adapter");
+			m_AdapterCombo.AddString(adapterText);
+		}
+
+		if (m_AdapterCombo.GetCount() > 0)
+			m_AdapterCombo.SetCurSel(0);
+	}
+
 	SetRegstryMessage();
 	SetDlgState(IPC_INITIALIZING);
 
@@ -435,4 +452,27 @@ void Cipc2019Dlg::OnBnClickedCheckToall()
 	else {
 		SetDlgState(IPC_UNICASTMODE);
 	}
+}
+
+
+void Cipc2019Dlg::OnBnClickedButtonAdapterConnect()
+{
+	int adapterIndex = m_AdapterCombo.GetCurSel();
+
+	if (adapterIndex == CB_ERR || m_NILayer == nullptr)
+	{
+		AfxMessageBox(_T("연결할 네트워크 어댑터를 선택하세요."));
+		return;
+	}
+
+	if (!m_NILayer->SetAdapter(adapterIndex))
+	{
+		CString errorMessage;
+		errorMessage.Format(_T("어댑터 연결 실패\n%S"), m_NILayer->GetLastError());
+		AfxMessageBox(errorMessage, MB_OK | MB_ICONERROR);
+		return;
+	}
+
+	SetDlgItemText(IDC_BUTTON_ADAPTER_CONNECT, _T("연결됨"));
+	m_ListChat.AddString(_T(">> Network adapter connected."));
 }
