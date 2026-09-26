@@ -63,6 +63,11 @@ void CEthernetLayer::SetDestinAddress(unsigned char* pAddress)
 
 BOOL CEthernetLayer::Send(unsigned char* ppayload, int nlength)
 {
+	if (ppayload == nullptr || nlength <= 0 || nlength > ETHER_MAX_DATA_SIZE)
+		return FALSE;
+
+	memset(m_sHeader.enet_data, 0, ETHER_MAX_DATA_SIZE);
+
 	// ChatApp �������� ���� App ������ Frame ���̸�ŭ�� Ethernet������ data�� �ִ´�.
 	memcpy(m_sHeader.enet_data, ppayload, nlength);
 
@@ -87,10 +92,25 @@ BOOL CEthernetLayer::Receive(unsigned char* ppayload)
 		pFrame->enet_type != ETHER_TYPE_FILE_NETWORK)
 		return FALSE;
 
-	//////////////////////// fill the blank ///////////////////////////////
-		// ChatApp �������� Ethernet Frame�� data�� �Ѱ��ش�.
-	bSuccess = mp_aUpperLayer[0]->Receive((unsigned char*)pFrame->enet_data);
-	///////////////////////////////////////////////////////////////////////
+	const unsigned char broadcastAddress[6] =
+		{ 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
+
+	// Accept only frames addressed to this host or broadcast frames.
+	if (memcmp(pFrame->enet_dstaddr, m_sHeader.enet_srcaddr, 6) != 0 &&
+		memcmp(pFrame->enet_dstaddr, broadcastAddress, 6) != 0)
+		return FALSE;
+
+	// Ignore a copy of a frame sent by this application.
+	if (memcmp(pFrame->enet_srcaddr, m_sHeader.enet_srcaddr, 6) == 0)
+		return FALSE;
+
+	if (pFrame->enet_type == ETHER_TYPE_CHAT_NETWORK &&
+		m_nUpperLayerCount > 0 &&
+		mp_aUpperLayer[0] != nullptr)
+	{
+		bSuccess = mp_aUpperLayer[0]->Receive(
+			(unsigned char*)pFrame->enet_data);
+	}
 
 	return bSuccess;
 }
