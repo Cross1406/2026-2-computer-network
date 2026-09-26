@@ -70,6 +70,7 @@ private:
 	};
 
 	void			SetDlgState(int state);
+	BOOL			ParseMacAddress(const CString& text, unsigned char address[6]);
 	inline void		EndofProcess();
 	inline void		SetRegstryMessage();
 	LRESULT			OnRegSendMsg(WPARAM wParam, LPARAM lParam);
@@ -79,6 +80,7 @@ private:
 
 	// Object App
 	CChatAppLayer* m_ChatApp;
+	CEthernetLayer* m_Ethernet;
 	CNILayer* m_NILayer;
 
 	// Implementation
@@ -87,8 +89,8 @@ private:
 public:
 	afx_msg void OnBnClickedButtonAddr();
 	afx_msg void OnBnClickedButtonSend();
-	UINT m_unSrcAddr;
-	UINT m_unDstAddr;
+	CString m_stSrcAddr;
+	CString m_stDstAddr;
 	CString m_stMessage;
 	CListBox m_ListChat;
 	afx_msg void OnBnClickedCheckToall();
