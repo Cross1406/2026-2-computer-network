@@ -9,6 +9,8 @@
 #include "EthernetLayer.h"	// Added by ClassView
 #include "FileLayer.h"	// Added by ClassView
 #include "NILayer.h"	// Npcap network interface layer
+#define WM_APP_LAYER_MESSAGE (WM_APP + 100)
+
 // Cipc2019Dlg 대화 상자
 class Cipc2019Dlg : public CDialogEx, public CBaseLayer
 {
@@ -76,6 +78,7 @@ private:
 	inline void		SetRegstryMessage();
 	LRESULT			OnRegSendMsg(WPARAM wParam, LPARAM lParam);
 	LRESULT			OnRegAckMsg(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnLayerMessage(WPARAM wParam, LPARAM lParam);
 
 	BOOL			m_bSendReady;
 
