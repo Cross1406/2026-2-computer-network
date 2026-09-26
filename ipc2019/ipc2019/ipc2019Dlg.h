@@ -79,6 +79,7 @@ private:
 
 	// Object App
 	CChatAppLayer* m_ChatApp;
+	CNILayer* m_NILayer;
 
 	// Implementation
 	UINT			m_wParam;
@@ -91,4 +92,6 @@ public:
 	CString m_stMessage;
 	CListBox m_ListChat;
 	afx_msg void OnBnClickedCheckToall();
+	afx_msg void OnBnClickedButtonAdapterConnect();
+	CComboBox m_AdapterCombo;
 };
