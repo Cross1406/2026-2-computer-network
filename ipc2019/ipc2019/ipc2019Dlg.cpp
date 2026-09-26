@@ -7,6 +7,7 @@
 #include "ipc2019.h"
 #include "ipc2019Dlg.h"
 #include "afxdialogex.h"
+#include <atlconv.h>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -58,8 +59,8 @@ Cipc2019Dlg::Cipc2019Dlg(CWnd* pParent /*=nullptr*/)
 	, m_bSendReady(FALSE)
 	, m_nAckReady( -1 )
 
-	, m_unSrcAddr(0)
-	, m_unDstAddr(0)
+	, m_stSrcAddr(_T("00:00:00:00:00:00"))
+	, m_stDstAddr(_T("00:00:00:00:00:00"))
 	, m_stMessage(_T(""))
 {
 	//대화상자 멤버 변수 초기화
@@ -81,6 +82,7 @@ Cipc2019Dlg::Cipc2019Dlg(CWnd* pParent /*=nullptr*/)
 	m_LayerMgr.ConnectLayers("NI ( *Ethernet ( *ChatApp ( *ChatDlg ) ) ) )");
 
 	m_ChatApp = (CChatAppLayer*)m_LayerMgr.GetLayer("ChatApp");
+	m_Ethernet = (CEthernetLayer*)m_LayerMgr.GetLayer("Ethernet");
 	m_NILayer = (CNILayer*)m_LayerMgr.GetLayer("NI");
 	//Protocol Layer Setting
 }
@@ -88,8 +90,8 @@ Cipc2019Dlg::Cipc2019Dlg(CWnd* pParent /*=nullptr*/)
 void Cipc2019Dlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
-	DDX_Text(pDX, IDC_EDIT_SRC, m_unSrcAddr);
-	DDX_Text(pDX, IDC_EDIT_DST, m_unDstAddr);
+	DDX_Text(pDX, IDC_EDIT_SRC, m_stSrcAddr);
+	DDX_Text(pDX, IDC_EDIT_DST, m_stDstAddr);
 	DDX_Text(pDX, IDC_EDIT_MSG, m_stMessage);
 	DDX_Control(pDX, IDC_LIST_CHAT, m_ListChat);
 	DDX_Control(pDX, IDC_COMBO_ADAPTER, m_AdapterCombo);
@@ -231,18 +233,9 @@ void Cipc2019Dlg::OnBnClickedButtonSend()
 
 	if (!m_stMessage.IsEmpty())
 	{
-		SetTimer(1, 2000, NULL);
-		m_nAckReady = 0;
-
 		SendData();
-		m_stMessage = "";
-
+		m_stMessage.Empty();
 		(CEdit*)GetDlgItem(IDC_EDIT3)->SetFocus();
-
-		//////////////////////// fill the blank ///////////////////////////////
-				// Send 신호를 브로드캐스트로 알림
-		::SendMessage(HWND_BROADCAST, nRegSendMsg, 0, 0);
-		///////////////////////////////////////////////////////////////////////
 	}
 
 	UpdateData(FALSE);
@@ -259,25 +252,13 @@ void Cipc2019Dlg::SetRegstryMessage()
 
 void Cipc2019Dlg::SendData()
 {
-	CString MsgHeader;
-	if (m_unDstAddr == (unsigned int)0xff)
-		MsgHeader.Format(_T("[%d:BROADCAST] "), m_unSrcAddr);
-	else
-		MsgHeader.Format(_T("[%d:%d] "), m_unSrcAddr, m_unDstAddr);
+	m_ListChat.AddString(_T("[SEND] ") + m_stMessage);
 
-	m_ListChat.AddString(MsgHeader + m_stMessage);
-
-	//////////////////////// fill the blank ///////////////////////////////
-	// 입력한 메시지를 파일로 저장
-	int nlength = m_stMessage.GetLength();
-	unsigned char* ppayload = new unsigned char[nlength + 1];
-	memcpy(ppayload, (unsigned char*)(LPCTSTR)m_stMessage, nlength);
-	ppayload[nlength] = '\0';
-
-
-	// 보낼 data와 메시지 길이를 Send함수로 넘겨준다.
-	m_ChatApp->Send(ppayload, nlength);
-	///////////////////////////////////////////////////////////////////////
+	// Ethernet payload uses UTF-8 so Korean text is transmitted correctly.
+	CStringA utf8Message = CW2A(m_stMessage, CP_UTF8);
+	m_ChatApp->Send(
+		reinterpret_cast<unsigned char*>(utf8Message.GetBuffer()),
+		utf8Message.GetLength());
 }
 
 BOOL Cipc2019Dlg::Receive(unsigned char* ppayload)
@@ -345,11 +326,11 @@ void Cipc2019Dlg::SetDlgState(int state)
 	case IPC_WAITFORACK:	break;
 	case IPC_ERROR:		break;
 	case IPC_UNICASTMODE:
-		m_unDstAddr = 0x0;
+		m_stDstAddr = _T("00:00:00:00:00:00");
 		pDstEdit->EnableWindow(TRUE);
 		break;
 	case IPC_BROADCASTMODE:
-		m_unDstAddr = 0xff;
+		m_stDstAddr = _T("FF:FF:FF:FF:FF:FF");
 		pDstEdit->EnableWindow(FALSE);
 		break;
 	case IPC_ADDR_SET:
@@ -413,33 +394,66 @@ void Cipc2019Dlg::OnTimer(UINT_PTR nIDEvent)
 }
 
 
+BOOL Cipc2019Dlg::ParseMacAddress(const CString& text, unsigned char address[6])
+{
+	CString normalized(text);
+	normalized.Trim();
+	normalized.Replace(_T('-'), _T(':'));
+
+	unsigned int value[6] = {};
+	if (normalized.GetLength() != 17 ||
+		_stscanf_s(
+			normalized,
+			_T("%2x:%2x:%2x:%2x:%2x:%2x"),
+			&value[0], &value[1], &value[2],
+			&value[3], &value[4], &value[5]) != 6)
+	{
+		return FALSE;
+	}
+
+	for (int i = 0; i < 6; ++i)
+		address[i] = static_cast<unsigned char>(value[i]);
+
+	return TRUE;
+}
+
 void Cipc2019Dlg::OnBnClickedButtonAddr()
 {
 	UpdateData(TRUE);
 
-	if (!m_unDstAddr ||
-		!m_unSrcAddr)
+	if (m_bSendReady)
 	{
-		AfxMessageBox(_T("주소를 설정 오류발생",
-			"경고"),
-			MB_OK | MB_ICONSTOP);
-
+		SetDlgState(IPC_ADDR_RESET);
+		SetDlgState(IPC_INITIALIZING);
+		m_bSendReady = FALSE;
 		return;
 	}
 
-	if (m_bSendReady) {
-		SetDlgState(IPC_ADDR_RESET);
-		SetDlgState(IPC_INITIALIZING);
-	}
-	else {
-		m_ChatApp->SetSourceAddress(m_unSrcAddr);
-		m_ChatApp->SetDestinAddress(m_unDstAddr);
+	unsigned char sourceAddress[6] = {};
+	unsigned char destinationAddress[6] = {};
 
-		SetDlgState(IPC_ADDR_SET);
-		SetDlgState(IPC_READYTOSEND);
+	if (!ParseMacAddress(m_stSrcAddr, sourceAddress) ||
+		!ParseMacAddress(m_stDstAddr, destinationAddress))
+	{
+		AfxMessageBox(
+			_T("MAC 주소를 AA:BB:CC:DD:EE:FF 형식으로 입력하세요."),
+			MB_OK | MB_ICONERROR);
+		return;
 	}
 
-	m_bSendReady = !m_bSendReady;
+	const unsigned char zeroAddress[6] = {};
+	if (memcmp(sourceAddress, zeroAddress, 6) == 0)
+	{
+		AfxMessageBox(_T("Source MAC 주소를 입력하세요."), MB_OK | MB_ICONERROR);
+		return;
+	}
+
+	m_Ethernet->SetSourceAddress(sourceAddress);
+	m_Ethernet->SetDestinAddress(destinationAddress);
+
+	SetDlgState(IPC_ADDR_SET);
+	SetDlgState(IPC_READYTOSEND);
+	m_bSendReady = TRUE;
 }
 
 void Cipc2019Dlg::OnBnClickedCheckToall()
