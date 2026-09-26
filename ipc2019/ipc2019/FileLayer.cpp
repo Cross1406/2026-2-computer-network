@@ -19,7 +19,7 @@ CFileLayer::~CFileLayer()
 {
     if (m_pSendThread != nullptr)
     {
-        WaitForSingleObject(m_pSendThread->m_hThread, 3000);
+        WaitForSingleObject(m_pSendThread->m_hThread, INFINITE);
         delete m_pSendThread;
         m_pSendThread = nullptr;
     }
@@ -29,6 +29,27 @@ CFileLayer::~CFileLayer()
         m_ReceiveFile.Close();
         m_bReceiving = FALSE;
     }
+}
+
+unsigned short CFileLayer::Swap16(unsigned short value)
+{
+    return static_cast<unsigned short>(
+        (value << 8) | (value >> 8));
+}
+
+unsigned int CFileLayer::Swap32(unsigned int value)
+{
+    return ((value & 0x000000ffU) << 24) |
+           ((value & 0x0000ff00U) << 8) |
+           ((value & 0x00ff0000U) >> 8) |
+           ((value & 0xff000000U) >> 24);
+}
+
+ULONGLONG CFileLayer::Swap64(ULONGLONG value)
+{
+    return (static_cast<ULONGLONG>(Swap32(
+                static_cast<unsigned int>(value))) << 32) |
+           Swap32(static_cast<unsigned int>(value >> 32));
 }
 
 BOOL CFileLayer::Send(unsigned char* ppayload, int nlength)
@@ -76,7 +97,7 @@ UINT CFileLayer::FileTransferThread(LPVOID pParam)
 }
 
 BOOL CFileLayer::SendPacket(
-    unsigned char type,
+    unsigned char messageType,
     unsigned int sequence,
     const unsigned char* data,
     unsigned int dataLength)
@@ -85,12 +106,14 @@ BOOL CFileLayer::SendPacket(
         return FALSE;
 
     FILE_PACKET packet = {};
-    packet.type = type;
-    packet.sequence = sequence;
-    packet.dataLength = dataLength;
+    packet.fapp_totlen = Swap32(dataLength);
+    packet.fapp_type = Swap16(FILE_DATA_KIND);
+    packet.fapp_msg_type = messageType;
+    packet.fapp_unused = 0;
+    packet.fapp_seq_num = Swap32(sequence);
 
     if (data != nullptr && dataLength > 0)
-        memcpy(packet.data, data, dataLength);
+        memcpy(packet.fapp_data, data, dataLength);
 
     CEthernetLayer* ethernet =
         static_cast<CEthernetLayer*>(mp_UnderLayer);
@@ -118,6 +141,8 @@ UINT CFileLayer::SendFile()
         if (success)
         {
             ULONGLONG fileSize = file.GetLength();
+            ULONGLONG networkFileSize = Swap64(fileSize);
+
             CString fileName = m_SendFilePath;
             int slash = max(fileName.ReverseFind(_T('\\')),
                             fileName.ReverseFind(_T('/')));
@@ -130,7 +155,7 @@ UINT CFileLayer::SendFile()
 
             unsigned char startData[FILE_DATA_SIZE] = {};
             unsigned int startLength =
-                static_cast<unsigned int>(sizeof(fileSize)) + nameLength;
+                static_cast<unsigned int>(sizeof(networkFileSize)) + nameLength;
 
             if (startLength > FILE_DATA_SIZE)
             {
@@ -138,14 +163,17 @@ UINT CFileLayer::SendFile()
             }
             else
             {
-                memcpy(startData, &fileSize, sizeof(fileSize));
                 memcpy(
-                    startData + sizeof(fileSize),
+                    startData,
+                    &networkFileSize,
+                    sizeof(networkFileSize));
+                memcpy(
+                    startData + sizeof(networkFileSize),
                     utf8FileName.GetString(),
                     nameLength);
 
                 success = SendPacket(
-                    FILE_TYPE_START,
+                    FILE_MSG_START,
                     0,
                     startData,
                     startLength);
@@ -161,15 +189,17 @@ UINT CFileLayer::SendFile()
                     break;
 
                 success = SendPacket(
-                    FILE_TYPE_DATA,
+                    FILE_MSG_DATA,
                     sequence++,
                     fileData,
                     bytesRead);
+
+                Sleep(1);
             }
 
             if (success)
                 success = SendPacket(
-                    FILE_TYPE_END,
+                    FILE_MSG_END,
                     sequence,
                     nullptr,
                     0);
@@ -200,17 +230,21 @@ BOOL CFileLayer::Receive(unsigned char* ppayload)
 
     PFILE_PACKET packet =
         reinterpret_cast<PFILE_PACKET>(ppayload);
+    unsigned int dataLength = Swap32(packet->fapp_totlen);
 
-    if (packet->dataLength > FILE_DATA_SIZE)
-        return FALSE;
-
-    switch (packet->type)
+    if (dataLength > FILE_DATA_SIZE ||
+        Swap16(packet->fapp_type) != FILE_DATA_KIND)
     {
-    case FILE_TYPE_START:
+        return FALSE;
+    }
+
+    switch (packet->fapp_msg_type)
+    {
+    case FILE_MSG_START:
         return ReceiveStart(packet);
-    case FILE_TYPE_DATA:
+    case FILE_MSG_DATA:
         return ReceiveData(packet);
-    case FILE_TYPE_END:
+    case FILE_MSG_END:
         return ReceiveEnd(packet);
     default:
         return FALSE;
@@ -219,8 +253,11 @@ BOOL CFileLayer::Receive(unsigned char* ppayload)
 
 BOOL CFileLayer::ReceiveStart(PFILE_PACKET packet)
 {
-    if (packet->sequence != 0 ||
-        packet->dataLength <= sizeof(ULONGLONG))
+    unsigned int dataLength = Swap32(packet->fapp_totlen);
+    unsigned int sequence = Swap32(packet->fapp_seq_num);
+
+    if (sequence != 0 ||
+        dataLength <= sizeof(ULONGLONG))
     {
         return FALSE;
     }
@@ -231,15 +268,17 @@ BOOL CFileLayer::ReceiveStart(PFILE_PACKET packet)
         m_bReceiving = FALSE;
     }
 
+    ULONGLONG networkFileSize = 0;
     memcpy(
-        &m_ExpectedFileSize,
-        packet->data,
-        sizeof(m_ExpectedFileSize));
+        &networkFileSize,
+        packet->fapp_data,
+        sizeof(networkFileSize));
+    m_ExpectedFileSize = Swap64(networkFileSize);
 
     const char* rawName = reinterpret_cast<const char*>(
-        packet->data + sizeof(m_ExpectedFileSize));
+        packet->fapp_data + sizeof(networkFileSize));
     size_t maximumNameLength =
-        packet->dataLength - sizeof(m_ExpectedFileSize);
+        dataLength - sizeof(networkFileSize);
 
     if (memchr(rawName, '\0', maximumNameLength) == nullptr)
         return FALSE;
@@ -285,8 +324,12 @@ BOOL CFileLayer::ReceiveStart(PFILE_PACKET packet)
 
 BOOL CFileLayer::ReceiveData(PFILE_PACKET packet)
 {
+    unsigned int dataLength = Swap32(packet->fapp_totlen);
+    unsigned int sequence = Swap32(packet->fapp_seq_num);
+
     if (!m_bReceiving ||
-        packet->sequence != m_ExpectedSequence)
+        sequence != m_ExpectedSequence ||
+        m_ReceivedFileSize + dataLength > m_ExpectedFileSize)
     {
         return FALSE;
     }
@@ -294,8 +337,8 @@ BOOL CFileLayer::ReceiveData(PFILE_PACKET packet)
     TRY
     {
         m_ReceiveFile.Write(
-            packet->data,
-            packet->dataLength);
+            packet->fapp_data,
+            dataLength);
     }
     CATCH(CFileException, e)
     {
@@ -306,15 +349,17 @@ BOOL CFileLayer::ReceiveData(PFILE_PACKET packet)
     }
     END_CATCH
 
-    m_ReceivedFileSize += packet->dataLength;
+    m_ReceivedFileSize += dataLength;
     ++m_ExpectedSequence;
     return TRUE;
 }
 
 BOOL CFileLayer::ReceiveEnd(PFILE_PACKET packet)
 {
+    unsigned int sequence = Swap32(packet->fapp_seq_num);
+
     if (!m_bReceiving ||
-        packet->sequence != m_ExpectedSequence)
+        sequence != m_ExpectedSequence)
     {
         return FALSE;
     }
