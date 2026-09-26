@@ -442,9 +442,12 @@ void Cipc2019Dlg::OnBnClickedButtonAddr()
 	}
 
 	const unsigned char zeroAddress[6] = {};
-	if (memcmp(sourceAddress, zeroAddress, 6) == 0)
+	if (memcmp(sourceAddress, zeroAddress, 6) == 0 ||
+		memcmp(destinationAddress, zeroAddress, 6) == 0)
 	{
-		AfxMessageBox(_T("Source MAC 주소를 입력하세요."), MB_OK | MB_ICONERROR);
+		AfxMessageBox(
+			_T("Source와 Destination MAC 주소를 모두 입력하세요."),
+			MB_OK | MB_ICONERROR);
 		return;
 	}
 
