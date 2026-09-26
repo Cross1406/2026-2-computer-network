@@ -12,12 +12,14 @@
 
 #include "BaseLayer.h"
 #include "pch.h"
+#include <vector>
 class CChatAppLayer
 	: public CBaseLayer
 {
 private:
 	inline void		ResetHeader();
 	CObject* mp_Dlg;
+	std::vector<unsigned char> m_ReceiveBuffer;
 
 public:
 	BOOL			Receive(unsigned char* ppayload);
