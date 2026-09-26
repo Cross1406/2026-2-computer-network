@@ -63,22 +63,30 @@ void CEthernetLayer::SetDestinAddress(unsigned char* pAddress)
 
 BOOL CEthernetLayer::Send(unsigned char* ppayload, int nlength)
 {
-	if (ppayload == nullptr || nlength <= 0 || nlength > ETHER_MAX_DATA_SIZE)
+	return Send(ppayload, nlength, ETHER_TYPE_CHAT_NETWORK);
+}
+
+BOOL CEthernetLayer::Send(
+	unsigned char* ppayload,
+	int nlength,
+	unsigned short nType)
+{
+	if (ppayload == nullptr ||
+		nlength <= 0 ||
+		nlength > ETHER_MAX_DATA_SIZE ||
+		mp_UnderLayer == nullptr)
+	{
 		return FALSE;
+	}
 
+	CSingleLock lock(&m_SendLock, TRUE);
+	m_sHeader.enet_type = nType;
 	memset(m_sHeader.enet_data, 0, ETHER_MAX_DATA_SIZE);
-
-	// ChatApp �������� ���� App ������ Frame ���̸�ŭ�� Ethernet������ data�� �ִ´�.
 	memcpy(m_sHeader.enet_data, ppayload, nlength);
 
-	BOOL bSuccess = FALSE;
-	//////////////////////// fill the blank ///////////////////////////////
-
-		// Ethernet Data + Ethernet Header�� ����� ���� ũ�⸸ŭ�� Ethernet Frame��
-		// File �������� ������.
-	bSuccess = mp_UnderLayer->Send((unsigned char*)&m_sHeader, nlength + ETHER_HEADER_SIZE);
-	///////////////////////////////////////////////////////////////////////
-	return bSuccess;
+	return mp_UnderLayer->Send(
+		(unsigned char*)&m_sHeader,
+		nlength + ETHER_HEADER_SIZE);
 }
 
 BOOL CEthernetLayer::Receive(unsigned char* ppayload)
@@ -109,6 +117,13 @@ BOOL CEthernetLayer::Receive(unsigned char* ppayload)
 		mp_aUpperLayer[0] != nullptr)
 	{
 		bSuccess = mp_aUpperLayer[0]->Receive(
+			(unsigned char*)pFrame->enet_data);
+	}
+	else if (pFrame->enet_type == ETHER_TYPE_FILE_NETWORK &&
+		m_nUpperLayerCount > 1 &&
+		mp_aUpperLayer[1] != nullptr)
+	{
+		bSuccess = mp_aUpperLayer[1]->Receive(
 			(unsigned char*)pFrame->enet_data);
 	}
 
