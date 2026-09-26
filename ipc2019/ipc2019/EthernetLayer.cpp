@@ -31,7 +31,8 @@ void CEthernetLayer::ResetHeader()
 	memset(m_sHeader.enet_dstaddr, 0, 6);
 	memset(m_sHeader.enet_srcaddr, 0, 6);
 	memset(m_sHeader.enet_data, 0, ETHER_MAX_DATA_SIZE);
-	m_sHeader.enet_type = 0;
+	// Ethernet fields are transmitted in network byte order.
+	m_sHeader.enet_type = ETHER_TYPE_CHAT_NETWORK;
 }
 
 unsigned char* CEthernetLayer::GetSourceAddress()
@@ -80,6 +81,12 @@ BOOL CEthernetLayer::Receive(unsigned char* ppayload)
 	PETHERNET_HEADER pFrame = (PETHERNET_HEADER)ppayload;
 
 	BOOL bSuccess = FALSE;
+
+	// Ignore normal IP/ARP traffic captured by Npcap.
+	if (pFrame->enet_type != ETHER_TYPE_CHAT_NETWORK &&
+		pFrame->enet_type != ETHER_TYPE_FILE_NETWORK)
+		return FALSE;
+
 	//////////////////////// fill the blank ///////////////////////////////
 		// ChatApp �������� Ethernet Frame�� data�� �Ѱ��ش�.
 	bSuccess = mp_aUpperLayer[0]->Receive((unsigned char*)pFrame->enet_data);
