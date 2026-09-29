@@ -8,10 +8,12 @@ CFileLayer::CFileLayer(char* pName)
     : CBaseLayer(pName),
       m_pSendThread(nullptr),
       m_bSending(FALSE),
+      m_LastSendProgress(-1),
       m_bReceiving(FALSE),
       m_ExpectedSequence(0),
       m_ExpectedFileSize(0),
-      m_ReceivedFileSize(0)
+      m_ReceivedFileSize(0),
+      m_LastReceiveProgress(-1)
 {
 }
 
@@ -142,6 +144,9 @@ UINT CFileLayer::SendFile()
         {
             ULONGLONG fileSize = file.GetLength();
             ULONGLONG networkFileSize = Swap64(fileSize);
+            ULONGLONG sentFileSize = 0;
+            m_LastSendProgress = -1;
+            NotifyProgress(TRUE, 0, fileSize);
 
             CString fileName = m_SendFilePath;
             int slash = max(fileName.ReverseFind(_T('\\')),
@@ -194,15 +199,26 @@ UINT CFileLayer::SendFile()
                     fileData,
                     bytesRead);
 
+                if (success)
+                {
+                    sentFileSize += bytesRead;
+                    NotifyProgress(TRUE, sentFileSize, fileSize);
+                }
+
                 Sleep(1);
             }
 
             if (success)
+            {
                 success = SendPacket(
                     FILE_MSG_END,
                     sequence,
                     nullptr,
                     0);
+
+                if (success)
+                    NotifyProgress(TRUE, fileSize, fileSize);
+            }
 
             file.Close();
         }
@@ -318,6 +334,8 @@ BOOL CFileLayer::ReceiveStart(PFILE_PACKET packet)
     m_bReceiving = TRUE;
     m_ExpectedSequence = 1;
     m_ReceivedFileSize = 0;
+    m_LastReceiveProgress = -1;
+    NotifyProgress(FALSE, 0, m_ExpectedFileSize);
     NotifyDialog(_T(">> Receiving file: ") + fileName);
     return TRUE;
 }
@@ -351,6 +369,7 @@ BOOL CFileLayer::ReceiveData(PFILE_PACKET packet)
 
     m_ReceivedFileSize += dataLength;
     ++m_ExpectedSequence;
+    NotifyProgress(FALSE, m_ReceivedFileSize, m_ExpectedFileSize);
     return TRUE;
 }
 
@@ -369,7 +388,10 @@ BOOL CFileLayer::ReceiveEnd(PFILE_PACKET packet)
 
     CString status;
     if (m_ReceivedFileSize == m_ExpectedFileSize)
+    {
+        NotifyProgress(FALSE, m_ExpectedFileSize, m_ExpectedFileSize);
         status = _T(">> File received: ") + m_ReceiveFilePath;
+    }
     else
         status = _T(">> File size mismatch: ") + m_ReceiveFilePath;
 
@@ -386,4 +408,32 @@ void CFileLayer::NotifyDialog(const CString& message)
             reinterpret_cast<unsigned char*>(
                 const_cast<LPTSTR>(message.GetString())));
     }
+}
+
+void CFileLayer::NotifyProgress(
+    BOOL sending,
+    ULONGLONG completed,
+    ULONGLONG total)
+{
+    int progress = total == 0
+        ? 100
+        : static_cast<int>((completed * 100) / total);
+
+    progress = max(0, min(100, progress));
+    int& lastProgress = sending
+        ? m_LastSendProgress
+        : m_LastReceiveProgress;
+
+    if (progress == lastProgress)
+        return;
+
+    lastProgress = progress;
+
+    CString message;
+    message.Format(
+        sending
+            ? _T("__FILE_PROGRESS_SEND__:%d")
+            : _T("__FILE_PROGRESS_RECEIVE__:%d"),
+        progress);
+    NotifyDialog(message);
 }

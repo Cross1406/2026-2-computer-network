@@ -98,6 +98,8 @@ public:
 	CString m_stDstAddr;
 	CString m_stMessage;
 	CListBox m_ListChat;
+	CProgressCtrl m_FileSendProgress;
+	CProgressCtrl m_FileReceiveProgress;
 	afx_msg void OnBnClickedCheckToall();
 	afx_msg void OnBnClickedButtonAdapterConnect();
 	afx_msg void OnBnClickedButtonFileBrowse();

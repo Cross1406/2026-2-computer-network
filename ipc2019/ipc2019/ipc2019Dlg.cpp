@@ -98,6 +98,8 @@ void Cipc2019Dlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Text(pDX, IDC_EDIT_FILE_PATH, m_stFilePath);
 	DDX_Control(pDX, IDC_LIST_CHAT, m_ListChat);
 	DDX_Control(pDX, IDC_COMBO_ADAPTER, m_AdapterCombo);
+	DDX_Control(pDX, IDC_PROGRESS_FILE_SEND, m_FileSendProgress);
+	DDX_Control(pDX, IDC_PROGRESS_FILE_RECEIVE, m_FileReceiveProgress);
 }
 
 // 레지스트리에 등록하기 위한 변수
@@ -176,6 +178,10 @@ BOOL Cipc2019Dlg::OnInitDialog()
 	}
 
 	SetRegstryMessage();
+	m_FileSendProgress.SetRange32(0, 100);
+	m_FileReceiveProgress.SetRange32(0, 100);
+	m_FileSendProgress.SetPos(0);
+	m_FileReceiveProgress.SetPos(0);
 	SetDlgState(IPC_INITIALIZING);
 
 	return TRUE;  // 포커스를 컨트롤에 설정하지 않으면 TRUE를 반환합니다.
@@ -294,6 +300,25 @@ LRESULT Cipc2019Dlg::OnLayerMessage(WPARAM wParam, LPARAM lParam)
 	CString* message = reinterpret_cast<CString*>(lParam);
 	if (message == nullptr)
 		return 0;
+
+	const CString sendProgressPrefix = _T("__FILE_PROGRESS_SEND__:");
+	const CString receiveProgressPrefix = _T("__FILE_PROGRESS_RECEIVE__:");
+
+	if (message->Left(sendProgressPrefix.GetLength()) == sendProgressPrefix)
+	{
+		int progress = _ttoi(message->Mid(sendProgressPrefix.GetLength()));
+		m_FileSendProgress.SetPos(max(0, min(100, progress)));
+		delete message;
+		return 0;
+	}
+
+	if (message->Left(receiveProgressPrefix.GetLength()) == receiveProgressPrefix)
+	{
+		int progress = _ttoi(message->Mid(receiveProgressPrefix.GetLength()));
+		m_FileReceiveProgress.SetPos(max(0, min(100, progress)));
+		delete message;
+		return 0;
+	}
 
 	m_ListChat.AddString(*message);
 
@@ -545,6 +570,7 @@ void Cipc2019Dlg::OnBnClickedButtonFileBrowse()
 	if (fileDialog.DoModal() == IDOK)
 	{
 		m_stFilePath = fileDialog.GetPathName();
+		m_FileSendProgress.SetPos(0);
 		SetDlgItemText(IDC_STATIC_FILE_STATUS, _T("상태: 파일 선택됨"));
 		UpdateData(FALSE);
 	}
@@ -577,5 +603,6 @@ void Cipc2019Dlg::OnBnClickedButtonFileSend()
 	}
 
 	m_ListChat.AddString(_T(">> Sending file: ") + m_stFilePath);
+	m_FileSendProgress.SetPos(0);
 	SetDlgItemText(IDC_STATIC_FILE_STATUS, _T("상태: 전송 중"));
 }

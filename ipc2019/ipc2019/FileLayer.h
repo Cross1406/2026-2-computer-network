@@ -49,6 +49,7 @@ private:
     BOOL ReceiveData(PFILE_PACKET packet);
     BOOL ReceiveEnd(PFILE_PACKET packet);
     void NotifyDialog(const CString& message);
+    void NotifyProgress(BOOL sending, ULONGLONG completed, ULONGLONG total);
 
     static unsigned short Swap16(unsigned short value);
     static unsigned int Swap32(unsigned int value);
@@ -58,6 +59,7 @@ private:
     CString m_SendFilePath;
     CWinThread* m_pSendThread;
     volatile BOOL m_bSending;
+    int m_LastSendProgress;
 
     CFile m_ReceiveFile;
     BOOL m_bReceiving;
@@ -65,4 +67,5 @@ private:
     ULONGLONG m_ExpectedFileSize;
     ULONGLONG m_ReceivedFileSize;
     CString m_ReceiveFilePath;
+    int m_LastReceiveProgress;
 };
