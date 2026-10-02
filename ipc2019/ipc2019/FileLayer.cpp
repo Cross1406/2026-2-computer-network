@@ -54,6 +54,8 @@ ULONGLONG CFileLayer::Swap64(ULONGLONG value)
            Swap32(static_cast<unsigned int>(value >> 32));
 }
 
+// CBaseLayer 인터페이스 호환용 함수.
+// 파일 전송은 경로가 필요한 StartFileSend()를 통해 시작한다.
 BOOL CFileLayer::Send(unsigned char* ppayload, int nlength)
 {
     UNREFERENCED_PARAMETER(ppayload);
@@ -66,6 +68,7 @@ BOOL CFileLayer::IsSending() const
     return m_bSending;
 }
 
+// UI에서 선택한 파일 경로를 저장하고 비동기 송신 스레드를 시작한다.
 BOOL CFileLayer::StartFileSend(const CString& filePath)
 {
     if (m_bSending || filePath.IsEmpty())
@@ -98,6 +101,7 @@ UINT CFileLayer::FileTransferThread(LPVOID pParam)
     return layer != nullptr ? layer->SendFile() : 0;
 }
 
+// FILE_PACKET 헤더를 작성한 뒤 EtherType 0x2090으로 Ethernet 계층에 전달한다.
 BOOL CFileLayer::SendPacket(
     unsigned char messageType,
     unsigned int sequence,
@@ -126,6 +130,10 @@ BOOL CFileLayer::SendPacket(
         ETHER_TYPE_FILE_NETWORK);
 }
 
+// 송신 전체 흐름:
+// 1) 파일 크기/이름을 START로 전송
+// 2) 파일을 1488-byte씩 읽어 DATA로 전송
+// 3) END를 전송하고 UI에 완료/실패를 알림
 UINT CFileLayer::SendFile()
 {
     BOOL success = TRUE;
@@ -148,6 +156,7 @@ UINT CFileLayer::SendFile()
             m_LastSendProgress = -1;
             NotifyProgress(TRUE, 0, fileSize);
 
+            // 경로 전체가 아니라 마지막 파일명만 상대 PC에 전달한다.
             CString fileName = m_SendFilePath;
             int slash = max(fileName.ReverseFind(_T('\\')),
                             fileName.ReverseFind(_T('/')));
@@ -158,6 +167,7 @@ UINT CFileLayer::SendFile()
             unsigned int nameLength =
                 static_cast<unsigned int>(utf8FileName.GetLength() + 1);
 
+            // START payload = network byte order의 64-bit 파일 크기 + NULL 종료 UTF-8 파일명.
             unsigned char startData[FILE_DATA_SIZE] = {};
             unsigned int startLength =
                 static_cast<unsigned int>(sizeof(networkFileSize)) + nameLength;
@@ -187,6 +197,7 @@ UINT CFileLayer::SendFile()
             unsigned int sequence = 1;
             unsigned char fileData[FILE_DATA_SIZE] = {};
 
+            // 파일 내용을 FILE_DATA_SIZE(1488 bytes) 단위로 읽는다.
             while (success)
             {
                 UINT bytesRead = file.Read(fileData, FILE_DATA_SIZE);
@@ -239,6 +250,7 @@ UINT CFileLayer::SendFile()
     return success ? 1 : 0;
 }
 
+// fapp_msg_type에 따라 START/DATA/END 전용 처리 함수로 분기한다.
 BOOL CFileLayer::Receive(unsigned char* ppayload)
 {
     if (ppayload == nullptr)
@@ -267,6 +279,7 @@ BOOL CFileLayer::Receive(unsigned char* ppayload)
     }
 }
 
+// 새 수신 작업을 초기화하고 ReceivedFiles/<원본 파일명>을 생성한다.
 BOOL CFileLayer::ReceiveStart(PFILE_PACKET packet)
 {
     unsigned int dataLength = Swap32(packet->fapp_totlen);
@@ -305,6 +318,7 @@ BOOL CFileLayer::ReceiveStart(PFILE_PACKET packet)
     if (slash >= 0)
         fileName = fileName.Mid(slash + 1);
 
+    // 전송된 파일명에서 경로와 Windows 금지 문자를 제거하여 경로 조작을 방지한다.
     const TCHAR invalidCharacters[] = _T(":*?\"<>|");
     for (int i = 0; invalidCharacters[i] != _T('\0'); ++i)
         fileName.Replace(invalidCharacters[i], _T('_'));
@@ -340,6 +354,8 @@ BOOL CFileLayer::ReceiveStart(PFILE_PACKET packet)
     return TRUE;
 }
 
+// sequence가 기대값과 같은 DATA만 파일 뒤에 기록한다.
+// 순서가 다르거나 전체 파일 크기를 넘으면 해당 패킷을 거부한다.
 BOOL CFileLayer::ReceiveData(PFILE_PACKET packet)
 {
     unsigned int dataLength = Swap32(packet->fapp_totlen);
@@ -373,6 +389,7 @@ BOOL CFileLayer::ReceiveData(PFILE_PACKET packet)
     return TRUE;
 }
 
+// 마지막 sequence와 최종 파일 크기를 검사한 뒤 파일을 닫는다.
 BOOL CFileLayer::ReceiveEnd(PFILE_PACKET packet)
 {
     unsigned int sequence = Swap32(packet->fapp_seq_num);
@@ -399,6 +416,7 @@ BOOL CFileLayer::ReceiveEnd(PFILE_PACKET packet)
     return m_ReceivedFileSize == m_ExpectedFileSize;
 }
 
+// worker thread가 직접 UI 컨트롤을 건드리지 않고 Dialog 계층에 메시지를 전달한다.
 void CFileLayer::NotifyDialog(const CString& message)
 {
     if (m_nUpperLayerCount > 0 &&
@@ -410,6 +428,8 @@ void CFileLayer::NotifyDialog(const CString& message)
     }
 }
 
+// 전송/수신 byte 비율을 0~100으로 계산한다.
+// 같은 퍼센트는 중복 통지하지 않아 UI 메시지 수를 줄인다.
 void CFileLayer::NotifyProgress(
     BOOL sending,
     ULONGLONG completed,

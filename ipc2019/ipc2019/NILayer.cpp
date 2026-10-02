@@ -29,6 +29,7 @@ CNILayer::~CNILayer()
     }
 }
 
+// pcap_findalldevs()로 Wi-Fi, Ethernet, 가상 어댑터 목록을 새로 읽는다.
 BOOL CNILayer::RefreshAdapterList()
 {
     if (m_pAllDevs != nullptr)
@@ -77,6 +78,7 @@ const char* CNILayer::GetAdapterDescription(int nIndex) const
     return nullptr;
 }
 
+// 선택한 어댑터를 promiscuous mode로 열고 과제 EtherType만 캡처하도록 설정한다.
 BOOL CNILayer::SetAdapter(int nIndex)
 {
     pcap_if_t* device = m_pAllDevs;
@@ -96,6 +98,7 @@ BOOL CNILayer::SetAdapter(int nIndex)
     }
 
     memset(m_ErrorBuffer, 0, sizeof(m_ErrorBuffer));
+    // snaplen=65536, promiscuous=1, read timeout=200 ms.
     m_pAdapter = pcap_open_live(
         device->name,
         65536,
@@ -136,6 +139,7 @@ BOOL CNILayer::SetAdapter(int nIndex)
     return StartReceive();
 }
 
+// 패킷 대기 때문에 UI가 멈추지 않도록 worker thread를 시작한다.
 BOOL CNILayer::StartReceive()
 {
     if (m_pAdapter == nullptr)
@@ -175,6 +179,7 @@ UINT CNILayer::ReceiveThread(LPVOID pParam)
     return layer != nullptr ? layer->CaptureLoop() : 0;
 }
 
+// pcap_next_ex()로 프레임을 반복 수신하여 Ethernet 계층으로 올린다.
 UINT CNILayer::CaptureLoop()
 {
     struct pcap_pkthdr* packetHeader = nullptr;
@@ -209,6 +214,7 @@ UINT CNILayer::CaptureLoop()
     return 0;
 }
 
+// Ethernet 계층에서 완성된 raw frame을 실제 랜카드로 전송한다.
 BOOL CNILayer::Send(unsigned char* ppayload, int nlength)
 {
     if (m_pAdapter == nullptr || ppayload == nullptr || nlength <= 0)

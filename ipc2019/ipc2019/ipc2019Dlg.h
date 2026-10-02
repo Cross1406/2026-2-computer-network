@@ -11,7 +11,10 @@
 #include "NILayer.h"	// Npcap network interface layer
 #define WM_APP_LAYER_MESSAGE (WM_APP + 100)
 
-// Cipc2019Dlg 대화 상자
+// UI와 각 프로토콜 계층을 연결하는 최상위 계층.
+//
+// 버튼 이벤트에서 채팅/파일 송신을 시작하고,
+// worker thread의 결과는 WM_APP_LAYER_MESSAGE를 통해 UI 스레드에서 표시한다.
 class Cipc2019Dlg : public CDialogEx, public CBaseLayer
 {
 // 생성입니다.
@@ -58,6 +61,7 @@ public:
 	inline void		SendData();
 
 private:
+	// 프로토콜 스택의 소유권과 연결 관계를 관리한다.
 	CLayerManager	m_LayerMgr;
 	int				m_nAckReady;
 
@@ -82,7 +86,7 @@ private:
 
 	BOOL			m_bSendReady;
 
-	// Object App
+	// 자주 사용하는 계층 객체 포인터.
 	CChatAppLayer* m_ChatApp;
 	CEthernetLayer* m_Ethernet;
 	CNILayer* m_NILayer;

@@ -52,6 +52,8 @@ CBaseLayer* CLayerManager::GetLayer(char* pName)
 	return NULL;
 }
 
+// 예: "NI ( *Ethernet ( *ChatApp ( *ChatDlg ) *File ( *ChatDlg ) ) )"
+// 위 문자열을 토큰으로 분해한 뒤 실제 계층 포인터를 연결한다.
 void CLayerManager::ConnectLayers(char* pcList)
 {
 	MakeList(pcList);
@@ -60,6 +62,8 @@ void CLayerManager::ConnectLayers(char* pcList)
 	arr = 3;
 }
 
+// 연결 문자열을 공백 단위 토큰 리스트로 변환한다.
+// strtok_s가 입력 버퍼를 변경하므로 복사본을 만들어 처리한다.
 void CLayerManager::MakeList(char* pcList)
 {
 	// strtok_s modifies its buffer, but pcList is a string literal.
@@ -146,6 +150,8 @@ CBaseLayer* CLayerManager::Top()
 	return mp_Stack[m_nTop];
 }
 
+// 토큰을 왼쪽부터 읽으며 스택을 사용해 분기 구조를 연결한다.
+// Ethernet 위에 ChatApp과 File이 동시에 연결되는 이유가 이 분기 때문이다.
 void CLayerManager::LinkLayer(PNODE pNode)
 {
 	CBaseLayer* pLayer = NULL;

@@ -13,11 +13,15 @@
 #include "pch.h"
 #include <afxmt.h>
 
+// Wireshark에서 확인하는 사용자 정의 EtherType.
+// 구조체 메모리에는 little-endian 값이 들어가므로 *_NETWORK 상수를 전송에 사용한다.
 #define ETHER_TYPE_CHAT 0x2080
 #define ETHER_TYPE_FILE 0x2090
 #define ETHER_TYPE_CHAT_NETWORK 0x8020
 #define ETHER_TYPE_FILE_NETWORK 0x9020
 
+// 응용 계층 패킷에 목적지/출발지 MAC과 EtherType을 붙이는 계층.
+// 수신 시에는 주소와 타입을 검사한 뒤 ChatApp 또는 File로 역다중화한다.
 class CEthernetLayer
 	: public CBaseLayer
 {
@@ -36,6 +40,7 @@ public:
 	CEthernetLayer(char* pName);
 	virtual ~CEthernetLayer();
 
+	// Ethernet II frame: [Dst MAC 6][Src MAC 6][Type 2][Payload <= 1500]
 	typedef struct _ETHERNET_HEADER {
 
 		unsigned char	enet_dstaddr[6];		// destination address of ethernet layer

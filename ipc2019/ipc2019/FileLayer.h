@@ -3,6 +3,10 @@
 #include "BaseLayer.h"
 #include "pch.h"
 
+// 파일 전송 응용 계층.
+//
+// 파일을 START/DATA/END 패킷으로 나누고 DATA 패킷에는 최대 1488 bytes를 담는다.
+// 송신은 worker thread에서 수행하며 수신 파일은 실행 폴더의 ReceivedFiles에 저장한다.
 class CFileLayer : public CBaseLayer
 {
 public:
@@ -18,6 +22,9 @@ public:
 private:
     enum
     {
+        // START: 전체 파일 크기(8 bytes) + UTF-8 파일명
+        // DATA : 실제 파일 데이터
+        // END  : 모든 DATA 패킷 전송 종료
         FILE_MSG_START = 0x00,
         FILE_MSG_DATA = 0x01,
         FILE_MSG_END = 0x02,
@@ -27,6 +34,8 @@ private:
     };
 
 #pragma pack(push, 1)
+    // 12-byte application header:
+    // [payload length:4][kind:2][message type:1][unused:1][sequence:4]
     typedef struct _FILE_PACKET
     {
         unsigned int fapp_totlen;
@@ -56,11 +65,13 @@ private:
     static ULONGLONG Swap64(ULONGLONG value);
 
 private:
+    // 송신 상태: UI와 worker thread가 공유한다.
     CString m_SendFilePath;
     CWinThread* m_pSendThread;
     volatile BOOL m_bSending;
     int m_LastSendProgress;
 
+    // 수신 상태: START에서 초기화되고 END에서 닫힌다.
     CFile m_ReceiveFile;
     BOOL m_bReceiving;
     unsigned int m_ExpectedSequence;

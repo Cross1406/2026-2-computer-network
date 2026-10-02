@@ -3,6 +3,9 @@
 #include "BaseLayer.h"
 #include <pcap.h>
 
+// Network Interface 계층.
+// Npcap API로 실제 랜카드를 열고 raw Ethernet frame을 송수신한다.
+// 별도 수신 스레드를 사용하므로 UI 스레드는 멈추지 않는다.
 class CNILayer : public CBaseLayer
 {
 public:
@@ -22,6 +25,7 @@ public:
     const char* GetLastError() const;
 
 private:
+    // MFC worker thread 진입점과 실제 packet capture loop.
     static UINT ReceiveThread(LPVOID pParam);
     UINT CaptureLoop();
     BOOL RefreshAdapterList();

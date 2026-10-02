@@ -72,14 +72,17 @@ Cipc2019Dlg::Cipc2019Dlg(CWnd* pParent /*=nullptr*/)
 
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 
-	//Protocol Layer Setting
+	// 프로토콜 계층 객체를 생성하여 LayerManager에 등록한다.
 	m_LayerMgr.AddLayer(new CChatAppLayer("ChatApp"));
 	m_LayerMgr.AddLayer(new CEthernetLayer("Ethernet"));
 	m_LayerMgr.AddLayer(new CFileLayer("File"));
 	m_LayerMgr.AddLayer(new CNILayer("NI"));
 	m_LayerMgr.AddLayer(this);
 
-	// 레이어를 연결한다. (레이어 생성)
+	// 실제 구조:
+	//                 +-> ChatApp -> Dialog
+	// NI -> Ethernet -+
+	//                 +-> File    -> Dialog
 	m_LayerMgr.ConnectLayers("NI ( *Ethernet ( *ChatApp ( *ChatDlg ) *File ( *ChatDlg ) ) ) )");
 
 	m_ChatApp = (CChatAppLayer*)m_LayerMgr.GetLayer("ChatApp");
@@ -239,6 +242,7 @@ HCURSOR Cipc2019Dlg::OnQueryDragIcon()
 
 
 
+// Send 버튼: 화면 입력을 읽고 ChatApp 계층 송신을 시작한다.
 void Cipc2019Dlg::OnBnClickedButtonSend()
 {
 	UpdateData(TRUE);
@@ -262,6 +266,8 @@ void Cipc2019Dlg::SetRegstryMessage()
 	///////////////////////////////////////////////////////////////////////
 }
 
+// UI 문자열을 UTF-8 바이트로 변환한다.
+// 실제 단편화와 헤더 작성은 ChatAppLayer가 담당한다.
 void Cipc2019Dlg::SendData()
 {
 	m_ListChat.AddString(_T("[SEND] ") + m_stMessage);
@@ -273,6 +279,8 @@ void Cipc2019Dlg::SendData()
 		utf8Message.GetLength());
 }
 
+// 하위 계층/worker thread에서 올라온 결과를 UI 스레드에 비동기로 전달한다.
+// MFC 컨트롤은 생성한 UI 스레드에서만 안전하게 수정해야 한다.
 BOOL Cipc2019Dlg::Receive(unsigned char* ppayload)
 {
 	if (ppayload == nullptr || GetSafeHwnd() == nullptr)
@@ -293,6 +301,8 @@ BOOL Cipc2019Dlg::Receive(unsigned char* ppayload)
 	return TRUE;
 }
 
+// UI 스레드에서 실행되는 사용자 정의 메시지 처리기.
+// 진행률 메시지는 progress bar에, 일반 메시지는 목록/상태 문구에 반영한다.
 LRESULT Cipc2019Dlg::OnLayerMessage(WPARAM wParam, LPARAM lParam)
 {
 	UNREFERENCED_PARAMETER(wParam);
@@ -420,6 +430,8 @@ void Cipc2019Dlg::EndofProcess()
 }
 
 // Send메시지 레지스트리가 켜졌을 때
+// 이전 IPC 과제에서 사용하던 Windows 등록 메시지 처리기.
+// 현재 Npcap 기반 LAN 송수신 경로에서는 호출하지 않는 레거시 코드이다.
 LRESULT Cipc2019Dlg::OnRegSendMsg(WPARAM wParam, LPARAM lParam)
 {
 	//////////////////////// fill the blank ///////////////////////////////
@@ -456,6 +468,7 @@ void Cipc2019Dlg::OnTimer(UINT_PTR nIDEvent)
 }
 
 
+// "AA:BB:CC:DD:EE:FF" 또는 하이픈 형식 문자열을 6-byte MAC으로 변환한다.
 BOOL Cipc2019Dlg::ParseMacAddress(const CString& text, unsigned char address[6])
 {
 	CString normalized(text);
@@ -479,6 +492,7 @@ BOOL Cipc2019Dlg::ParseMacAddress(const CString& text, unsigned char address[6])
 	return TRUE;
 }
 
+// 입력 MAC을 검증한 뒤 Ethernet header의 Source/Destination에 설정한다.
 void Cipc2019Dlg::OnBnClickedButtonAddr()
 {
 	UpdateData(TRUE);
@@ -534,6 +548,7 @@ void Cipc2019Dlg::OnBnClickedCheckToall()
 }
 
 
+// 선택한 실제 유선 어댑터를 Npcap으로 열고 수신 스레드를 시작한다.
 void Cipc2019Dlg::OnBnClickedButtonAdapterConnect()
 {
 	int adapterIndex = m_AdapterCombo.GetCurSel();
@@ -557,6 +572,7 @@ void Cipc2019Dlg::OnBnClickedButtonAdapterConnect()
 }
 
 
+// 파일 선택 대화상자를 열고 전송할 로컬 파일 경로를 저장한다.
 void Cipc2019Dlg::OnBnClickedButtonFileBrowse()
 {
 	CFileDialog fileDialog(
@@ -576,6 +592,7 @@ void Cipc2019Dlg::OnBnClickedButtonFileBrowse()
 	}
 }
 
+// 입력 상태를 검증한 뒤 FileLayer의 비동기 파일 송신을 시작한다.
 void Cipc2019Dlg::OnBnClickedButtonFileSend()
 {
 	UpdateData(TRUE);

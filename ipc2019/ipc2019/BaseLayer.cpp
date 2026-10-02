@@ -30,6 +30,7 @@ CBaseLayer::~CBaseLayer()
 
 }
 
+// í˜„ìž¬ ê³„ì¸µê³¼ ì¸ìž ê³„ì¸µì„ ì–‘ë°©í–¥ìœ¼ë¡œ ì—°ê²°í•œë‹¤.
 void CBaseLayer::SetUnderUpperLayer(CBaseLayer* pUULayer)
 {
 	if (!pUULayer) // if the pointer is null, 
@@ -41,13 +42,14 @@ void CBaseLayer::SetUnderUpperLayer(CBaseLayer* pUULayer)
 	}
 
 	//////////////////////// fill the blank ///////////////////////////////
-		// ÀÎÀÚ·Î ¹ÞÀº °èÃþÀº ÇöÀç °èÃþÀÇ Under·Î ³õ°í
-		// ÇöÀç °èÃþÀ» ÀÎÀÚ·Î ¹ÞÀº °èÃþÀÇ Upper·Î ³õ´Â´Ù.
+		// ì¸ìžë¡œ ë°›ì€ ê³„ì¸µì€ í˜„ìž¬ ê³„ì¸µì˜ Underë¡œ ë†“ê³ 
+		// í˜„ìž¬ ê³„ì¸µì„ ì¸ìžë¡œ ë°›ì€ ê³„ì¸µì˜ Upperë¡œ ë†“ëŠ”ë‹¤.
 	this->mp_UnderLayer = pUULayer;
 	pUULayer->SetUpperLayer(this);
 	///////////////////////////////////////////////////////////////////////
 }
 
+// ì¸ìž ê³„ì¸µì„ í˜„ìž¬ ê³„ì¸µì˜ ìƒìœ„ë¡œ, í˜„ìž¬ ê³„ì¸µì„ ì¸ìž ê³„ì¸µì˜ í•˜ìœ„ë¡œ ì—°ê²°í•œë‹¤.
 void CBaseLayer::SetUpperUnderLayer(CBaseLayer* pUULayer)
 {
 	if (!pUULayer) // if the pointer is null, 
@@ -59,8 +61,8 @@ void CBaseLayer::SetUpperUnderLayer(CBaseLayer* pUULayer)
 	}
 
 	//////////////////////// fill the blank ///////////////////////////////
-		// ÀÎÀÚ·Î ¹ÞÀº °èÃþÀ» Upper¿¡ ³õ°í
-		// ÇöÀç °èÃþÀº Upper·Î ³õÀº °èÃþÀÇ Under·Î ³õ´Â´Ù.
+		// ì¸ìžë¡œ ë°›ì€ ê³„ì¸µì„ Upperì— ë†“ê³ 
+		// í˜„ìž¬ ê³„ì¸µì€ Upperë¡œ ë†“ì€ ê³„ì¸µì˜ Underë¡œ ë†“ëŠ”ë‹¤.
 	SetUpperLayer(pUULayer);
 	pUULayer->SetUnderLayer(this);
 	///////////////////////////////////////////////////////////////////////

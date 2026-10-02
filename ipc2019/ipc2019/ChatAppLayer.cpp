@@ -20,6 +20,7 @@ CChatAppLayer::~CChatAppLayer()
 {
 }
 
+// 프로세서의 바이트 순서와 네트워크 바이트 순서 사이를 변환한다.
 unsigned short CChatAppLayer::Swap16(unsigned short value)
 {
     return static_cast<unsigned short>(
@@ -31,6 +32,7 @@ void CChatAppLayer::ResetHeader()
     memset(&m_sHeader, 0, sizeof(m_sHeader));
 }
 
+// UTF-8 채팅 문자열을 1496-byte 이하 조각으로 나누어 Ethernet 계층으로 보낸다.
 BOOL CChatAppLayer::Send(unsigned char* ppayload, int nlength)
 {
     if (ppayload == nullptr ||
@@ -41,6 +43,7 @@ BOOL CChatAppLayer::Send(unsigned char* ppayload, int nlength)
         return FALSE;
     }
 
+    // offset은 원본 메시지에서 다음에 보낼 위치이다.
     int offset = 0;
 
     while (offset < nlength)
@@ -67,6 +70,7 @@ BOOL CChatAppLayer::Send(unsigned char* ppayload, int nlength)
         else
             m_sHeader.capp_type = CHAT_TYPE_LAST;
 
+        // ChatApp header까지 포함한 길이를 Ethernet payload 길이로 전달한다.
         if (!mp_UnderLayer->Send(
                 reinterpret_cast<unsigned char*>(&m_sHeader),
                 APP_HEADER_SIZE + fragmentLength))
@@ -80,6 +84,7 @@ BOOL CChatAppLayer::Send(unsigned char* ppayload, int nlength)
     return TRUE;
 }
 
+// 조각을 순서대로 버퍼에 누적하고 LAST에서 UTF-8 문자열로 복원한다.
 BOOL CChatAppLayer::Receive(unsigned char* ppayload)
 {
     if (ppayload == nullptr)
@@ -92,6 +97,7 @@ BOOL CChatAppLayer::Receive(unsigned char* ppayload)
     if (totalLength == 0)
         return FALSE;
 
+    // FIRST에서는 이전 상태를 비우고 전체 길이만큼 재조립 버퍼를 준비한다.
     if (header->capp_type == CHAT_TYPE_FIRST)
     {
         m_ReceiveBuffer.clear();
@@ -120,6 +126,7 @@ BOOL CChatAppLayer::Receive(unsigned char* ppayload)
         header->capp_data,
         header->capp_data + fragmentLength);
 
+    // 마지막 조각 전까지는 버퍼에만 저장하고 수신을 계속한다.
     if (header->capp_type != CHAT_TYPE_LAST)
         return TRUE;
 
@@ -130,6 +137,7 @@ BOOL CChatAppLayer::Receive(unsigned char* ppayload)
         return FALSE;
     }
 
+    // 완성된 UTF-8 바이트열 끝에 NULL을 붙인 후 화면 표시용 CString으로 변환한다.
     m_ReceiveBuffer.push_back('\0');
     CString receivedMessage = CA2W(
         reinterpret_cast<const char*>(m_ReceiveBuffer.data()),

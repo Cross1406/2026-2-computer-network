@@ -12,6 +12,13 @@
 #pragma once
 #endif // _MSC_VER > 1000
 
+// 계층 객체를 이름으로 관리하고 프로토콜 스택을 연결하는 클래스.
+//
+// ConnectLayers 문자열 문법:
+//   * : 두 계층을 상/하위로 양방향 연결
+//   + : 상위 계층만 추가
+//   - : 하위 계층만 지정
+//   ( ) : 현재 기준 계층을 스택에 저장/복원
 class CLayerManager
 {
 private:
