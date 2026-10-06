@@ -1,4 +1,6 @@
-# 6주차 Basic ARP 구현·실행 가이드
+# 기존 통합 프로젝트의 Basic ARP 구현·실행 가이드
+
+**6주차 독립 ARP 프로젝트는 [week06_arp/README.md](week06_arp/README.md)를 참고하세요. 아래 안내는 기존 `ipc2019` 통합 버전용입니다.**
 
 기존 Chat/File Transfer 프로젝트에 Basic ARP를 추가했습니다. `NILayer`, `EthernetLayer`, `BaseLayer`, `LayerManager`를 재사용합니다. 채팅 `0x2080`, 파일 `0x2090`은 유지하고 ARP `0x0806`을 추가했습니다.
 

@@ -6,7 +6,6 @@ import shutil
 import subprocess
 import tempfile
 root = Path(__file__).resolve().parents[1]
-source = root / 'ipc2019/ipc2019'
 compiler = os.environ.get('CXX', 'g++')
 flags = ['-std=c++14', '-g', '-Wall', '-Wextra', '-Wno-unused-parameter',
          '-fsanitize=address,undefined', '-fno-omit-frame-pointer', '-pthread']
@@ -30,19 +29,24 @@ public:
     CSingleLock(CCriticalSection* section, BOOL) : lock(section->mutex) {}
 };
 '''
-with tempfile.TemporaryDirectory(prefix='arp-tests-') as tmp:
-    work = Path(tmp)
-    for name in ['BaseLayer.h','BaseLayer.cpp','EthernetLayer.h','EthernetLayer.cpp',
-                 'ARPLayer.h','ARPLayer.cpp','ARPProtocol.h']:
-        shutil.copy2(source/name, work/name)
-    for name in ['pch.h','stdafx.h','afxmt.h','ipc2019.h']:
-        (work/name).write_text(shim if name=='pch.h' else '#pragma once\n#include "pch.h"\n')
-    protocol = work/'protocol'
-    subprocess.run([compiler,*flags,str(root/'tests/arp_protocol_test.cpp'),'-o',str(protocol)],check=True)
-    subprocess.run([str(protocol)],check=True)
-    layers = work/'layers'
-    subprocess.run([compiler,*flags,'-I',str(work),str(root/'tests/arp_layers_test.cpp'),
-                    *(str(work/name) for name in ['BaseLayer.cpp','EthernetLayer.cpp','ARPLayer.cpp']),
-                    '-o',str(layers)],check=True)
-    subprocess.run([str(layers)],check=True)
+for directory, layer_test in [('ipc2019/ipc2019','arp_layers_test.cpp'),
+                              ('week06_arp/ARP','week06_layers_test.cpp')]:
+    source = root / directory
+    print(f'Testing {directory}', flush=True)
+    with tempfile.TemporaryDirectory(prefix='arp-tests-') as tmp:
+        work = Path(tmp)
+        for name in ['BaseLayer.h','BaseLayer.cpp','EthernetLayer.h','EthernetLayer.cpp',
+                     'ARPLayer.h','ARPLayer.cpp','ARPProtocol.h']:
+            shutil.copy2(source/name, work/name)
+        for name in ['pch.h','stdafx.h','afxmt.h','ipc2019.h','ARPApp.h']:
+            (work/name).write_text(shim if name=='pch.h' else '#pragma once\n#include "pch.h"\n')
+        protocol = work/'protocol'
+        subprocess.run([compiler,*flags,'-I',str(work),str(root/'tests/arp_protocol_test.cpp'),'-o',str(protocol)],check=True)
+        subprocess.run([str(protocol)],check=True)
+        layers = work/'layers'
+        subprocess.run([compiler,*flags,'-I',str(work),str(root/'tests'/layer_test),
+                        *(str(work/name) for name in ['BaseLayer.cpp','EthernetLayer.cpp','ARPLayer.cpp']),
+                        '-o',str(layers)],check=True)
+        subprocess.run([str(layers)],check=True)
+subprocess.run(['python3',str(root/'tests/check_week06_project.py')],check=True)
 print('All ARP tests passed (ASan + UBSan). Windows MFC/Npcap live test is separate.')

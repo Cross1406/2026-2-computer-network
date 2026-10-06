@@ -1,4 +1,17 @@
-# 2026-2 Computer Network — Chat & File Transfer + Basic ARP
+# 2026-2 Computer Network · 주차별 실습
+
+주차마다 별도 Visual Studio 솔루션을 엽니다. 같은 저장소 안에 있어도 소스와 화면, 빌드 결과는 프로젝트별로 독립적입니다.
+
+| 프로젝트 | 열어야 할 솔루션 | 용도 |
+|---|---|---|
+| 기존 프로젝트 (유지) | `ipc2019/ipc2019.sln` | 기존 채팅·파일 전송 + ARP 통합 버전 |
+| **6주차 ARP 전용** | **`week06_arp/Week06ARP.sln`** | ARP 캐시·요청·응답·삭제·만료 전용 화면 |
+
+**6주차 테스트는 [week06_arp/README.md](week06_arp/README.md)를 읽고 `Week06ARP.sln`을 여세요.** 기존 프로젝트에서 빌드하면 기존 화면이 실행됩니다. 이후 주차도 새 폴더와 솔루션으로 추가합니다.
+
+---
+
+## 기존 프로젝트 — Chat & File Transfer + Basic ARP
 
 두 PC를 LAN선으로 연결하고 Npcap을 이용해 raw Ethernet frame으로 채팅과 파일을 주고받는 MFC 프로젝트입니다.
 

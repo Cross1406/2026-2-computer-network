@@ -1,0 +1,17 @@
+#pragma once
+#define IDD_ARP_DIALOG 102
+#define IDR_MAINFRAME 128
+#define IDC_ADAPTER 1001
+#define IDC_CONNECT 1002
+#define IDC_SELF_MAC 1003
+#define IDC_SELF_IP 1004
+#define IDC_CONFIGURE 1005
+#define IDC_TARGET_IP 1006
+#define IDC_REQUEST 1007
+#define IDC_CACHE 1008
+#define IDC_DELETE 1009
+#define IDC_CLEAR 1010
+#define IDC_STATUS 1011
+#ifndef IDC_STATIC
+#define IDC_STATIC -1
+#endif

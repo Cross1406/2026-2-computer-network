@@ -1,4 +1,4 @@
-#include "../ipc2019/ipc2019/ARPProtocol.h"
+#include "ARPProtocol.h"
 #include <cassert>
 #include <iostream>
 using namespace arp;
