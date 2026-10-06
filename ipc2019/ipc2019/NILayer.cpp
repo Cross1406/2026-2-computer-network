@@ -111,7 +111,7 @@ BOOL CNILayer::SetAdapter(int nIndex)
 
     // Only deliver frames used by this assignment.
     bpf_program filterProgram;
-    const char* filterExpression = "ether proto 0x2080 or ether proto 0x2090";
+    const char* filterExpression = "ether proto 0x2080 or ether proto 0x2090 or ether proto 0x0806";
 
     if (pcap_compile(
             m_pAdapter,
@@ -149,7 +149,7 @@ BOOL CNILayer::StartReceive()
         return TRUE;
 
     m_bRunning = TRUE;
-    m_pReceiveThread = AfxBeginThread(ReceiveThread, this);
+    m_pReceiveThread = AfxBeginThread(ReceiveThread, this, THREAD_PRIORITY_NORMAL, 0, CREATE_SUSPENDED);
 
     if (m_pReceiveThread == nullptr)
     {
@@ -158,6 +158,7 @@ BOOL CNILayer::StartReceive()
     }
 
     m_pReceiveThread->m_bAutoDelete = FALSE;
+    m_pReceiveThread->ResumeThread();
     return TRUE;
 }
 
@@ -167,7 +168,9 @@ void CNILayer::StopReceive()
 
     if (m_pReceiveThread != nullptr)
     {
-        WaitForSingleObject(m_pReceiveThread->m_hThread, 1500);
+        if (m_pAdapter) pcap_breakloop(m_pAdapter);
+        // Join before closing pcap or deleting the thread object.
+        WaitForSingleObject(m_pReceiveThread->m_hThread, INFINITE);
         delete m_pReceiveThread;
         m_pReceiveThread = nullptr;
     }
@@ -196,7 +199,7 @@ UINT CNILayer::CaptureLoop()
                 mp_aUpperLayer[0] != nullptr)
             {
                 mp_aUpperLayer[0]->Receive(
-                    const_cast<unsigned char*>(packetData));
+                    const_cast<unsigned char*>(packetData), static_cast<int>(packetHeader->caplen));
             }
         }
         else if (result == -1)

@@ -19,6 +19,8 @@
 #define ETHER_TYPE_FILE 0x2090
 #define ETHER_TYPE_CHAT_NETWORK 0x8020
 #define ETHER_TYPE_FILE_NETWORK 0x9020
+#define ETHER_TYPE_ARP 0x0806
+#define ETHER_TYPE_ARP_NETWORK 0x0608
 
 // 응용 계층 패킷에 목적지/출발지 MAC과 EtherType을 붙이는 계층.
 // 수신 시에는 주소와 타입을 검사한 뒤 ChatApp 또는 File로 역다중화한다.
@@ -29,7 +31,9 @@ private:
 	inline void		ResetHeader();
 
 public:
-	BOOL			Receive(unsigned char* ppayload);
+	BOOL Receive(unsigned char* ppayload) override;
+	BOOL Receive(unsigned char* ppayload, int length) override;
+	BOOL SendTo(unsigned char* payload, int length, unsigned short type, const unsigned char destination[6]);
 	BOOL			Send(unsigned char* ppayload, int nlength);
 	BOOL			Send(unsigned char* ppayload, int nlength, unsigned short nType);
 	void			SetDestinAddress(unsigned char* pAddress);

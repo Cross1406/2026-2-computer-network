@@ -2,6 +2,7 @@
 
 #include "BaseLayer.h"
 #include <pcap.h>
+#include <atomic>
 
 // Network Interface 계층.
 // Npcap API로 실제 랜카드를 열고 raw Ethernet frame을 송수신한다.
@@ -34,6 +35,6 @@ private:
     pcap_if_t* m_pAllDevs;
     pcap_t* m_pAdapter;
     CWinThread* m_pReceiveThread;
-    volatile BOOL m_bRunning;
+    std::atomic<bool> m_bRunning;
     char m_ErrorBuffer[PCAP_ERRBUF_SIZE];
 };

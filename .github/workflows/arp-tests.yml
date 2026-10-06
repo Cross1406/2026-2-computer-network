@@ -1,0 +1,9 @@
+name: ARP protocol and layer tests
+on: [push, pull_request]
+jobs:
+  arp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test packet format, cache and production Ethernet/ARP layers
+        run: python3 tests/run_arp_tests.py

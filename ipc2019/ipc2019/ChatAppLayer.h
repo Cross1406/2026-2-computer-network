@@ -15,6 +15,7 @@ private:
 
 public:
     BOOL Receive(unsigned char* ppayload) override;
+    BOOL Receive(unsigned char* ppayload, int length) override;
     BOOL Send(unsigned char* ppayload, int nlength) override;
 
     CChatAppLayer(char* pName);

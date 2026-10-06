@@ -77,18 +77,21 @@ Cipc2019Dlg::Cipc2019Dlg(CWnd* pParent /*=nullptr*/)
 	m_LayerMgr.AddLayer(new CEthernetLayer("Ethernet"));
 	m_LayerMgr.AddLayer(new CFileLayer("File"));
 	m_LayerMgr.AddLayer(new CNILayer("NI"));
+	m_LayerMgr.AddLayer(new CARPLayer("ARP"));
 	m_LayerMgr.AddLayer(this);
 
 	// 실제 구조:
 	//                 +-> ChatApp -> Dialog
 	// NI -> Ethernet -+
 	//                 +-> File    -> Dialog
-	m_LayerMgr.ConnectLayers("NI ( *Ethernet ( *ChatApp ( *ChatDlg ) *File ( *ChatDlg ) ) ) )");
+	//                 +-> ARP (cache; UI polls snapshots)
+	m_LayerMgr.ConnectLayers("NI ( *Ethernet ( *ChatApp ( *ChatDlg ) *File ( *ChatDlg ) *ARP ) )");
 
 	m_ChatApp = (CChatAppLayer*)m_LayerMgr.GetLayer("ChatApp");
 	m_Ethernet = (CEthernetLayer*)m_LayerMgr.GetLayer("Ethernet");
 	m_NILayer = (CNILayer*)m_LayerMgr.GetLayer("NI");
 	m_FileLayer = (CFileLayer*)m_LayerMgr.GetLayer("File");
+	m_ARPLayer = static_cast<CARPLayer*>(m_LayerMgr.GetLayer("ARP"));
 	//Protocol Layer Setting
 }
 
@@ -101,6 +104,7 @@ void Cipc2019Dlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Text(pDX, IDC_EDIT_FILE_PATH, m_stFilePath);
 	DDX_Control(pDX, IDC_LIST_CHAT, m_ListChat);
 	DDX_Control(pDX, IDC_COMBO_ADAPTER, m_AdapterCombo);
+	DDX_Control(pDX, IDC_LIST_ARP_CACHE, m_ArpCache);
 	DDX_Control(pDX, IDC_PROGRESS_FILE_SEND, m_FileSendProgress);
 	DDX_Control(pDX, IDC_PROGRESS_FILE_RECEIVE, m_FileReceiveProgress);
 }
@@ -130,6 +134,12 @@ BEGIN_MESSAGE_MAP(Cipc2019Dlg, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON_ADAPTER_CONNECT, &Cipc2019Dlg::OnBnClickedButtonAdapterConnect)
 	ON_BN_CLICKED(IDC_BUTTON_FILE_BROWSE, &Cipc2019Dlg::OnBnClickedButtonFileBrowse)
 	ON_BN_CLICKED(IDC_BUTTON_FILE_SEND, &Cipc2019Dlg::OnBnClickedButtonFileSend)
+	ON_WM_DESTROY()
+	ON_BN_CLICKED(IDC_BUTTON_ARP_CONFIGURE, &Cipc2019Dlg::OnArpConfigure)
+	ON_BN_CLICKED(IDC_BUTTON_ARP_REQUEST, &Cipc2019Dlg::OnArpRequest)
+	ON_BN_CLICKED(IDC_BUTTON_ARP_DELETE, &Cipc2019Dlg::OnArpDelete)
+	ON_BN_CLICKED(IDC_BUTTON_ARP_CLEAR, &Cipc2019Dlg::OnArpClear)
+	ON_BN_CLICKED(IDC_BUTTON_ARP_USE, &Cipc2019Dlg::OnArpUse)
 	ON_MESSAGE(WM_APP_LAYER_MESSAGE, &Cipc2019Dlg::OnLayerMessage)
 END_MESSAGE_MAP()
 
@@ -180,6 +190,14 @@ BOOL Cipc2019Dlg::OnInitDialog()
 			m_AdapterCombo.SetCurSel(0);
 	}
 
+	m_ArpCache.SetExtendedStyle(LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
+	m_ArpCache.InsertColumn(0, _T("IP"), LVCFMT_LEFT, 105);
+	m_ArpCache.InsertColumn(1, _T("MAC"), LVCFMT_LEFT, 145);
+	m_ArpCache.InsertColumn(2, _T("State"), LVCFMT_LEFT, 85);
+	m_ArpCache.InsertColumn(3, _T("TTL(s)"), LVCFMT_LEFT, 60);
+	SetDlgItemText(IDC_EDIT_ARP_SELF_IP, _T("192.168.10.1"));
+	SetDlgItemText(IDC_EDIT_ARP_TARGET_IP, _T("192.168.10.2"));
+	SetTimer(2, 1000, nullptr); // UI polling avoids worker-thread control access.
 	SetRegstryMessage();
 	m_FileSendProgress.SetRange32(0, 100);
 	m_FileReceiveProgress.SetRange32(0, 100);
@@ -459,7 +477,8 @@ LRESULT Cipc2019Dlg::OnRegAckMsg(WPARAM wParam, LPARAM lParam)
 
 void Cipc2019Dlg::OnTimer(UINT_PTR nIDEvent)
 {
-	// TODO: Add your message handler code here and/or call default
+	if (nIDEvent == 2) { RefreshArpCache(); return; }
+	// Legacy IPC timeout.
 	m_ListChat.AddString(_T(">> The last message was time-out.."));
 	m_nAckReady = -1;
 	KillTimer(1);
@@ -496,6 +515,7 @@ BOOL Cipc2019Dlg::ParseMacAddress(const CString& text, unsigned char address[6])
 void Cipc2019Dlg::OnBnClickedButtonAddr()
 {
 	UpdateData(TRUE);
+	if (m_FileLayer->IsSending()) { AfxMessageBox(_T("파일 전송 완료 후 주소를 변경하세요.")); return; }
 
 	if (m_bSendReady)
 	{
@@ -527,6 +547,11 @@ void Cipc2019Dlg::OnBnClickedButtonAddr()
 		return;
 	}
 
+	arp::Mac sourceMac; memcpy(sourceMac.data(), sourceAddress, 6);
+	if (!m_ARPLayer->MatchesMac(sourceMac)) {
+		m_ARPLayer->Disable();
+		SetDlgItemText(IDC_STATIC_ARP_STATUS, _T("Source 변경: ARP 설정을 다시 적용하세요."));
+	}
 	m_Ethernet->SetSourceAddress(sourceAddress);
 	m_Ethernet->SetDestinAddress(destinationAddress);
 
@@ -551,6 +576,7 @@ void Cipc2019Dlg::OnBnClickedCheckToall()
 // 선택한 실제 유선 어댑터를 Npcap으로 열고 수신 스레드를 시작한다.
 void Cipc2019Dlg::OnBnClickedButtonAdapterConnect()
 {
+	if (m_FileLayer->IsSending()) { AfxMessageBox(_T("파일 전송 완료 후 어댑터를 변경하세요.")); return; }
 	int adapterIndex = m_AdapterCombo.GetCurSel();
 
 	if (adapterIndex == CB_ERR || m_NILayer == nullptr)
@@ -559,6 +585,10 @@ void Cipc2019Dlg::OnBnClickedButtonAdapterConnect()
 		return;
 	}
 
+	m_bAdapterConnected = FALSE;
+	m_ARPLayer->Disable();
+	SetDlgItemText(IDC_STATIC_ARP_STATUS, _T("어댑터 변경: ARP 설정을 적용하세요."));
+	RefreshArpCache();
 	if (!m_NILayer->SetAdapter(adapterIndex))
 	{
 		CString errorMessage;
@@ -567,6 +597,7 @@ void Cipc2019Dlg::OnBnClickedButtonAdapterConnect()
 		return;
 	}
 
+	m_bAdapterConnected = TRUE;
 	SetDlgItemText(IDC_BUTTON_ADAPTER_CONNECT, _T("연결됨"));
 	m_ListChat.AddString(_T(">> Network adapter connected."));
 }
@@ -622,4 +653,101 @@ void Cipc2019Dlg::OnBnClickedButtonFileSend()
 	m_ListChat.AddString(_T(">> Sending file: ") + m_stFilePath);
 	m_FileSendProgress.SetPos(0);
 	SetDlgItemText(IDC_STATIC_FILE_STATUS, _T("상태: 전송 중"));
+}
+
+
+// ARP is a separate address-resolution operation; the OS IP is not changed.
+BOOL Cipc2019Dlg::ReadArpIp(int control, arp::Ip& ip)
+{
+    CString text; GetDlgItemText(control, text); text.Trim();
+    CStringA ascii(text);
+    if (!arp::ParseIp(ascii.GetString(), ip)) {
+        AfxMessageBox(_T("유효한 IPv4 주소를 입력하세요. 예: 192.168.10.1"));
+        return FALSE;
+    }
+    return TRUE;
+}
+void Cipc2019Dlg::OnArpConfigure()
+{
+    if (!m_bAdapterConnected) { AfxMessageBox(_T("유선 어댑터를 먼저 연결하세요.")); return; }
+    if (m_FileLayer->IsSending()) { AfxMessageBox(_T("파일 전송 완료 후 ARP 설정을 변경하세요.")); return; }
+    arp::Ip ip; arp::Mac mac; CString source;
+    GetDlgItemText(IDC_EDIT_SRC, source);
+    if (!ReadArpIp(IDC_EDIT_ARP_SELF_IP, ip)) return;
+    if (!ParseMacAddress(source, mac.data()) || !arp::ValidMac(mac)) {
+        AfxMessageBox(_T("Source Address에 선택한 어댑터의 실제 MAC 주소를 입력하세요.")); return;
+    }
+    // Never hold the Ethernet lock while acquiring the ARP lock.
+    m_Ethernet->SetSourceAddress(mac.data());
+    m_ARPLayer->Configure(ip, mac);
+    SetDlgItemText(IDC_STATIC_ARP_STATUS, _T("ARP 설정 완료: 요청 수신 시 자동 응답합니다."));
+    RefreshArpCache();
+}
+void Cipc2019Dlg::OnArpRequest()
+{
+    arp::Ip target;
+    if (!ReadArpIp(IDC_EDIT_ARP_TARGET_IP, target)) return;
+    if (!m_bAdapterConnected || !m_ARPLayer->Request(target)) {
+        AfxMessageBox(_T("요청 실패: 어댑터 연결, ARP 설정, 대상 IP(자기 IP 제외)를 확인하세요.")); return;
+    }
+    SetDlgItemText(IDC_STATIC_ARP_STATUS, _T("Request 전송: 응답 시 캐시가 Complete로 바뀝니다."));
+    RefreshArpCache();
+}
+void Cipc2019Dlg::RefreshArpCache()
+{
+    CString selectedIp;
+    const int selected = m_ArpCache.GetNextItem(-1, LVNI_SELECTED);
+    if (selected >= 0) selectedIp = m_ArpCache.GetItemText(selected, 0);
+    const auto entries = m_ARPLayer->Snapshot();
+    m_ArpCache.DeleteAllItems();
+    const ULONGLONG now = GetTickCount64();
+    for (const auto& entry : entries) {
+        CString ip, mac, ttl;
+        ip.Format(_T("%u.%u.%u.%u"), entry.ip[0], entry.ip[1], entry.ip[2], entry.ip[3]);
+        if (entry.complete)
+            mac.Format(_T("%02X:%02X:%02X:%02X:%02X:%02X"), entry.mac[0], entry.mac[1],
+                       entry.mac[2], entry.mac[3], entry.mac[4], entry.mac[5]);
+        else mac = _T("??:??:??:??:??:??");
+        const ULONGLONG lifetime = entry.complete ? arp::CompleteLifetime : arp::IncompleteLifetime;
+        const ULONGLONG elapsed = now - entry.updatedAt;
+        ttl.Format(_T("%llu"), elapsed >= lifetime ? 0ULL : (lifetime - elapsed + 999) / 1000);
+        const int row = m_ArpCache.InsertItem(m_ArpCache.GetItemCount(), ip);
+        m_ArpCache.SetItemText(row, 1, mac);
+        m_ArpCache.SetItemText(row, 2, entry.complete ? _T("Complete") : _T("Incomplete"));
+        m_ArpCache.SetItemText(row, 3, ttl);
+        if (ip == selectedIp) m_ArpCache.SetItemState(row, LVIS_SELECTED, LVIS_SELECTED);
+    }
+}
+void Cipc2019Dlg::OnArpDelete()
+{
+    const int row = m_ArpCache.GetNextItem(-1, LVNI_SELECTED);
+    if (row < 0) { AfxMessageBox(_T("삭제할 캐시 항목을 선택하세요.")); return; }
+    arp::Ip ip; CStringA text(m_ArpCache.GetItemText(row, 0));
+    if (arp::ParseIp(text.GetString(), ip)) m_ARPLayer->Remove(ip);
+    RefreshArpCache();
+}
+void Cipc2019Dlg::OnArpClear() { m_ARPLayer->Clear(); RefreshArpCache(); }
+void Cipc2019Dlg::OnArpUse()
+{
+    if (m_FileLayer->IsSending()) { AfxMessageBox(_T("파일 전송 완료 후 목적지를 변경하세요.")); return; }
+    arp::Ip ip; arp::Mac mac;
+    if (!ReadArpIp(IDC_EDIT_ARP_TARGET_IP, ip)) return;
+    if (!m_ARPLayer->Lookup(ip, mac)) {
+        AfxMessageBox(_T("대상 IP의 Complete 항목이 없습니다. ARP 요청 후 응답을 확인하세요.")); return;
+    }
+    UpdateData(TRUE); // Preserve unsent chat and file-path input.
+    m_stDstAddr.Format(_T("%02X:%02X:%02X:%02X:%02X:%02X"), mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    m_Ethernet->SetDestinAddress(mac.data());
+    UpdateData(FALSE);
+    CheckDlgButton(IDC_CHECK_TOALL, BST_UNCHECKED);
+    SetDlgState(IPC_ADDR_SET);
+    SetDlgState(IPC_READYTOSEND);
+    m_bSendReady = TRUE;
+    SetDlgItemText(IDC_STATIC_ARP_STATUS, _T("대상 MAC 적용 완료: 채팅·파일 전송 가능합니다."));
+}
+void Cipc2019Dlg::OnDestroy()
+{
+    KillTimer(2);
+    m_NILayer->StopReceive(); // No receive callbacks after the window is destroyed.
+    CDialogEx::OnDestroy();
 }

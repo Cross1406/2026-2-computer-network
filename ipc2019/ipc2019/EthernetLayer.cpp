@@ -50,11 +50,13 @@ unsigned char* CEthernetLayer::GetDestinAddress()
 void CEthernetLayer::SetSourceAddress(unsigned char* pAddress)
 {
 	// 사용자가 입력한 6-byte MAC 주소를 송신 헤더에 저장한다.
+	CSingleLock lock(&m_SendLock, TRUE);
 	memcpy(m_sHeader.enet_srcaddr, pAddress, 6);
 }
 
 void CEthernetLayer::SetDestinAddress(unsigned char* pAddress)
 {
+	CSingleLock lock(&m_SendLock, TRUE);
 	memcpy(m_sHeader.enet_dstaddr, pAddress, 6);
 }
 
@@ -78,57 +80,54 @@ BOOL CEthernetLayer::Send(
 		return FALSE;
 	}
 
-	// 공유 프레임 버퍼(m_sHeader)를 한 번에 한 송신만 수정하도록 잠근다.
-	CSingleLock lock(&m_SendLock, TRUE);
-	m_sHeader.enet_type = nType;
-	memset(m_sHeader.enet_data, 0, ETHER_MAX_DATA_SIZE);
-	memcpy(m_sHeader.enet_data, ppayload, nlength);
-
-	return mp_UnderLayer->Send(
-		(unsigned char*)&m_sHeader,
-		nlength + ETHER_HEADER_SIZE);
+    return SendTo(ppayload, nlength, nType, nullptr);
 }
 
-// Npcap에서 받은 Ethernet frame을 필터링하고 알맞은 상위 계층으로 전달한다.
-BOOL CEthernetLayer::Receive(unsigned char* ppayload)
+// ARP uses a per-frame destination, preserving the Chat/File destination MAC.
+BOOL CEthernetLayer::SendTo(unsigned char* payload, int length, unsigned short type,
+                           const unsigned char destination[6])
 {
-	PETHERNET_HEADER pFrame = (PETHERNET_HEADER)ppayload;
+    if (!payload || length <= 0 || length > ETHER_MAX_DATA_SIZE || !mp_UnderLayer)
+        return FALSE;
+    CSingleLock lock(&m_SendLock, TRUE);
+    unsigned char frame[ETHER_HEADER_SIZE + ETHER_MAX_DATA_SIZE] = {};
+    memcpy(frame, destination ? destination : m_sHeader.enet_dstaddr, 6);
+    memcpy(frame + 6, m_sHeader.enet_srcaddr, 6);
+    memcpy(frame + 12, &type, 2);
+    memcpy(frame + ETHER_HEADER_SIZE, payload, length);
+    // Ethernet minimum without FCS is 60 bytes; NIC appends the FCS.
+    const int wireLength = length + ETHER_HEADER_SIZE < 60 ? 60 : length + ETHER_HEADER_SIZE;
+    return mp_UnderLayer->Send(frame, wireLength);
+}
 
-	BOOL bSuccess = FALSE;
+BOOL CEthernetLayer::Receive(unsigned char* payload)
+{
+    // A captured frame cannot safely be parsed without its captured length.
+    UNREFERENCED_PARAMETER(payload);
+    return FALSE;
+}
 
-	// Ignore normal IP/ARP traffic captured by Npcap.
-	if (pFrame->enet_type != ETHER_TYPE_CHAT_NETWORK &&
-		pFrame->enet_type != ETHER_TYPE_FILE_NETWORK)
-		return FALSE;
-
-	const unsigned char broadcastAddress[6] =
-		{ 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
-
-	// Accept only frames addressed to this host or broadcast frames.
-	if (memcmp(pFrame->enet_dstaddr, m_sHeader.enet_srcaddr, 6) != 0 &&
-		memcmp(pFrame->enet_dstaddr, broadcastAddress, 6) != 0)
-		return FALSE;
-
-	// Ignore a copy of a frame sent by this application.
-	if (memcmp(pFrame->enet_srcaddr, m_sHeader.enet_srcaddr, 6) == 0)
-		return FALSE;
-
-	// EtherType을 이용한 demultiplexing:
-	// upper[0] = ChatApp, upper[1] = File.
-	if (pFrame->enet_type == ETHER_TYPE_CHAT_NETWORK &&
-		m_nUpperLayerCount > 0 &&
-		mp_aUpperLayer[0] != nullptr)
-	{
-		bSuccess = mp_aUpperLayer[0]->Receive(
-			(unsigned char*)pFrame->enet_data);
-	}
-	else if (pFrame->enet_type == ETHER_TYPE_FILE_NETWORK &&
-		m_nUpperLayerCount > 1 &&
-		mp_aUpperLayer[1] != nullptr)
-	{
-		bSuccess = mp_aUpperLayer[1]->Receive(
-			(unsigned char*)pFrame->enet_data);
-	}
-
-	return bSuccess;
+BOOL CEthernetLayer::Receive(unsigned char* frame, int length)
+{
+    if (!frame || length < ETHER_HEADER_SIZE) return FALSE;
+    unsigned short type = 0;
+    memcpy(&type, frame + 12, 2);
+    if (type != ETHER_TYPE_CHAT_NETWORK && type != ETHER_TYPE_FILE_NETWORK &&
+        type != ETHER_TYPE_ARP_NETWORK) return FALSE;
+    unsigned char source[6];
+    {
+        CSingleLock lock(&m_SendLock, TRUE);
+        memcpy(source, m_sHeader.enet_srcaddr, 6);
+    }
+    const unsigned char broadcast[6] = {255,255,255,255,255,255};
+    if ((memcmp(frame, source, 6) != 0 && memcmp(frame, broadcast, 6) != 0) ||
+        memcmp(frame + 6, source, 6) == 0) return FALSE;
+    const int payloadLength = length - ETHER_HEADER_SIZE;
+    const int index = type == ETHER_TYPE_CHAT_NETWORK ? 0 : type == ETHER_TYPE_FILE_NETWORK ? 1 : 2;
+    const int minimum = index == 0 ? 4 : index == 1 ? 12 : 28;
+    if (payloadLength < minimum || m_nUpperLayerCount <= index || !mp_aUpperLayer[index])
+        return FALSE;
+    if (index == 2 && memcmp(frame + 6, frame + ETHER_HEADER_SIZE + 8, 6) != 0)
+        return FALSE; // Ethernet source must match ARP SHA.
+    return mp_aUpperLayer[index]->Receive(frame + ETHER_HEADER_SIZE, payloadLength);
 }

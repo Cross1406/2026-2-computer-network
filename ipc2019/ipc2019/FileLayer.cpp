@@ -83,7 +83,7 @@ BOOL CFileLayer::StartFileSend(const CString& filePath)
 
     m_SendFilePath = filePath;
     m_bSending = TRUE;
-    m_pSendThread = AfxBeginThread(FileTransferThread, this);
+    m_pSendThread = AfxBeginThread(FileTransferThread, this, THREAD_PRIORITY_NORMAL, 0, CREATE_SUSPENDED);
 
     if (m_pSendThread == nullptr)
     {
@@ -92,6 +92,7 @@ BOOL CFileLayer::StartFileSend(const CString& filePath)
     }
 
     m_pSendThread->m_bAutoDelete = FALSE;
+    m_pSendThread->ResumeThread();
     return TRUE;
 }
 
@@ -456,4 +457,15 @@ void CFileLayer::NotifyProgress(
             : _T("__FILE_PROGRESS_RECEIVE__:%d"),
         progress);
     NotifyDialog(message);
+}
+
+
+BOOL CFileLayer::Receive(unsigned char* payload, int length)
+{
+    if (!payload || length < FILE_PACKET_HEADER_SIZE) return FALSE;
+    auto* packet = reinterpret_cast<PFILE_PACKET>(payload);
+    const unsigned int dataLength = Swap32(packet->fapp_totlen);
+    if (dataLength > FILE_DATA_SIZE ||
+        dataLength > static_cast<unsigned int>(length - FILE_PACKET_HEADER_SIZE)) return FALSE;
+    return Receive(payload);
 }

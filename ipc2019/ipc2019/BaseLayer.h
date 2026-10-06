@@ -41,6 +41,7 @@ public:
 	// param : unsigned char*	- the data of the underlayer
 	// 하위 계층에서 올라온 데이터를 검사/역캡슐화하여 상위 계층으로 전달한다.
 	virtual	BOOL	Receive(unsigned char* ppayload) { return FALSE; }
+	virtual BOOL Receive(unsigned char* data, int length) { return Receive(data); }
 	virtual	BOOL	Receive() { return FALSE; }
 
 protected:

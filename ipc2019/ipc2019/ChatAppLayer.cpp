@@ -151,3 +151,21 @@ BOOL CChatAppLayer::Receive(unsigned char* ppayload)
         reinterpret_cast<unsigned char*>(
             const_cast<LPTSTR>(displayMessage.GetString())));
 }
+
+
+// Captured length is mandatory on the NI -> Ethernet receive path.
+BOOL CChatAppLayer::Receive(unsigned char* payload, int length)
+{
+    if (!payload || length < APP_HEADER_SIZE) return FALSE;
+    auto* header = reinterpret_cast<PCHAT_APP_HEADER>(payload);
+    const unsigned int total = Swap16(header->capp_totlen);
+    if (header->capp_type != CHAT_TYPE_FIRST && header->capp_type != CHAT_TYPE_MIDDLE &&
+        header->capp_type != CHAT_TYPE_LAST) return FALSE;
+    const unsigned int used = header->capp_type == CHAT_TYPE_FIRST ? 0 :
+                             static_cast<unsigned int>(m_ReceiveBuffer.size());
+    if (total <= used) return FALSE;
+    const unsigned int remaining = total - used;
+    const unsigned int needed = remaining > APP_DATA_SIZE ? APP_DATA_SIZE : remaining;
+    if (static_cast<unsigned int>(length - APP_HEADER_SIZE) < needed) return FALSE;
+    return Receive(payload);
+}

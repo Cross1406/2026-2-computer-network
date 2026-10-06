@@ -2,6 +2,7 @@
 
 #include "BaseLayer.h"
 #include "pch.h"
+#include <atomic>
 
 // 파일 전송 응용 계층.
 //
@@ -15,6 +16,7 @@ public:
 
     BOOL Send(unsigned char* ppayload, int nlength) override;
     BOOL Receive(unsigned char* ppayload) override;
+    BOOL Receive(unsigned char* ppayload, int length) override;
 
     BOOL StartFileSend(const CString& filePath);
     BOOL IsSending() const;
@@ -68,7 +70,7 @@ private:
     // 송신 상태: UI와 worker thread가 공유한다.
     CString m_SendFilePath;
     CWinThread* m_pSendThread;
-    volatile BOOL m_bSending;
+    std::atomic<bool> m_bSending;
     int m_LastSendProgress;
 
     // 수신 상태: START에서 초기화되고 END에서 닫힌다.

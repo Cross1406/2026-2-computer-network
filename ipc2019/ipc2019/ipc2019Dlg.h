@@ -8,6 +8,7 @@
 #include "ChatAppLayer.h"	// Added by ClassView
 #include "EthernetLayer.h"	// Added by ClassView
 #include "FileLayer.h"	// Added by ClassView
+#include "ARPLayer.h"
 #include "NILayer.h"	// Npcap network interface layer
 #define WM_APP_LAYER_MESSAGE (WM_APP + 100)
 
@@ -91,6 +92,17 @@ private:
 	CEthernetLayer* m_Ethernet;
 	CNILayer* m_NILayer;
 	CFileLayer* m_FileLayer;
+	CARPLayer* m_ARPLayer;
+	BOOL m_bAdapterConnected = FALSE;
+	CListCtrl m_ArpCache;
+	void RefreshArpCache();
+	BOOL ReadArpIp(int control, arp::Ip& ip);
+	afx_msg void OnArpConfigure();
+	afx_msg void OnArpRequest();
+	afx_msg void OnArpDelete();
+	afx_msg void OnArpClear();
+	afx_msg void OnArpUse();
+	afx_msg void OnDestroy();
 
 	// Implementation
 	UINT			m_wParam;
