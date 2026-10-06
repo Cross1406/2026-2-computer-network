@@ -21,6 +21,9 @@ for name in set(re.findall(r'IDC_\w+',ui)):
     assert name in rc and re.search(r'#define\s+'+name+r'\s+\d+',ids), name
 for file in list(source.glob('*.h'))+list(source.glob('*.cpp')):
     content = file.read_text(encoding='utf-8-sig')
+    if file.suffix == '.cpp':
+        includes = re.findall(r'#include\s+"([^"]+)"',content)
+        assert includes and includes[0] == 'pch.h', f'{file.name}: MSVC PCH must be the first include'
     for header in re.findall(r'#include\s+"([^"]+)"',content):
         assert header=='afxdialogex.h' or (source/header).is_file(), (file.name,header)
     assert 'ChatAppLayer' not in content and 'FileLayer' not in content, file

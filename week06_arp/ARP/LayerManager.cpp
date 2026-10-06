@@ -1,10 +1,9 @@
-#pragma once
 // LayerManager.cpp: implementation of the CLayerManager class.
 //
 //////////////////////////////////////////////////////////////////////
 
-#include "stdafx.h"
 #include "pch.h"
+#include "stdafx.h"
 #include "LayerManager.h"
 
 #ifdef _DEBUG
